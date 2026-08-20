@@ -25,6 +25,9 @@ export const config = {
   // Outreach stays triple-locked (policies §3): live mode AND this flag AND an
   // approved canary row. Until all three, sends are outbox records.
   outreachEnabled: process.env.OUTREACH_ENABLED === "true",
+  // Firecrawl (YC credits): real web search/scrape for the web-facing roles.
+  // Optional — tools degrade to a clear error when unset.
+  firecrawlKey: process.env.FIRECRAWL_API_KEY ?? "",
 };
 
 export function phaseActive(rolePhase: "A" | "B" | "C"): boolean {

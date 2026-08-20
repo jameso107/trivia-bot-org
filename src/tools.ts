@@ -66,6 +66,29 @@ function queryTool(name: string, tables: string[], description: string): OrgTool
   };
 }
 
+// Firecrawl REST helper (v2). Returns {error} instead of throwing so agents
+// see failures as data and can adapt mid-run.
+async function firecrawl(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown> & { error?: string }> {
+  if (!config.firecrawlKey) return { error: "FIRECRAWL_API_KEY is not set on this host" };
+  try {
+    const res = await fetch(`https://api.firecrawl.dev/v2${path}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${config.firecrawlKey}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json()) as Record<string, unknown>;
+    if (!res.ok || json.success === false) {
+      return { error: `firecrawl ${path} failed (${res.status}): ${JSON.stringify(json.error ?? json).slice(0, 300)}` };
+    }
+    return json;
+  } catch (e) {
+    return { error: `firecrawl ${path} error: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
 // A write tool wraps its live implementation with the dry-run guard.
 function writeTool(
   spec: Omit<OrgTool, "effect" | "run"> & {
@@ -115,6 +138,71 @@ export const TOOLBELT: Record<string, OrgTool> = {
     parameters: { type: "object", properties: {}, additionalProperties: false },
     async run() {
       return computeKpis();
+    },
+  },
+
+  // Firecrawl-backed web reads (owner's YC credits). Reading the public web is
+  // not a side effect, so these stay REAL even in dry mode — exactly like the
+  // OpenAI web_search tool. Credit-thrifty by design: search returns metadata
+  // only; scrape is one URL, main content, truncated.
+  firecrawl_search: {
+    name: "firecrawl_search",
+    description:
+      "Search the live web (Firecrawl). Returns titles/URLs/descriptions ONLY — follow up with firecrawl_scrape on the few URLs that matter. Every call spends credits: one good query beats five vague ones.",
+    effect: "read",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        limit: { type: "number", description: "1-10, default 5" },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    async run(args) {
+      const out = await firecrawl("/search", {
+        query: String(args.query),
+        limit: Math.min(Math.max(Number(args.limit ?? 5), 1), 10),
+      });
+      if ("error" in out) return out;
+      const data = out.data as { web?: unknown[] } | unknown[] | undefined;
+      const results = (Array.isArray(data) ? data : (data?.web ?? [])) as Record<string, unknown>[];
+      return {
+        results: results.map((r) => ({
+          title: r.title,
+          url: r.url,
+          description: String(r.description ?? "").slice(0, 300),
+        })),
+      };
+    },
+  },
+
+  firecrawl_scrape: {
+    name: "firecrawl_scrape",
+    description:
+      "Fetch ONE URL as clean markdown (Firecrawl, main content only, truncated to 6000 chars). Use it to verify evidence pages and extract public contact info AFTER search found the URL.",
+    effect: "read",
+    parameters: {
+      type: "object",
+      properties: { url: { type: "string" } },
+      required: ["url"],
+      additionalProperties: false,
+    },
+    async run(args) {
+      const out = await firecrawl("/scrape", {
+        url: String(args.url),
+        formats: ["markdown"],
+        onlyMainContent: true,
+      });
+      if ("error" in out) return out;
+      const data = out.data as { markdown?: string; metadata?: { title?: string; sourceURL?: string } } | undefined;
+      const md = String(data?.markdown ?? "");
+      return {
+        title: data?.metadata?.title ?? null,
+        url: data?.metadata?.sourceURL ?? String(args.url),
+        markdown: md.slice(0, 6000),
+        truncated: md.length > 6000,
+      };
     },
   },
 

@@ -53,7 +53,9 @@ Vercel builds the console from `web/`.
    | `ORG_MODE` | `dry` (flip to `live` here later — edits auto-redeploy) |
 
    Optional overrides (defaults are baked in): `ORG_PHASE`, `ORG_MODEL`,
-   `DAILY_BUDGET_USD`, `MAX_RUN_USD`, `OWNER_EMAIL`. `BRAIN_PATH=brain` is set
+   `DAILY_BUDGET_USD`, `MAX_RUN_USD`, `OWNER_EMAIL`. Optional integrations:
+   `FIRECRAWL_API_KEY` (real web search/scrape for venue-search, trivia-qa,
+   ads-recruit, website-content — without it those tools return a clear error). `BRAIN_PATH=brain` is set
    by the Dockerfile. `SUPABASE_PUBLISHABLE_KEY` isn't needed (seed-signup is
    a local-only helper).
 4. **Verify** — deploy logs show `brain: doctrine ready …` then the roster
@@ -92,6 +94,8 @@ Vercel builds the console from `web/`.
   trivia-qa holds `set_pack_status`, and the live-promotion bar
   (confidence ≥0.9, zero flags) is enforced mechanically, not by prompt.
 - **Gated actions** become `approvals` rows + outbox records, never actions.
+- **Web reads are real in every mode** (OpenAI web_search + the Firecrawl
+  tools): reading the public web is not a side effect. Writes stay guarded.
 - **KILL SWITCH**: the console's Controls page flips `org_flags.kill_switch`,
   which the daemon re-reads before EVERY run — works from anywhere. Stopping
   the daemon process kills everything too.
