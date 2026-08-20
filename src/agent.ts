@@ -54,6 +54,7 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
   const instructions = [
     `You are the **${roleKey}** agent of Trivia Bot — a stateless worker in an agentic company. Today is ${new Date().toISOString().slice(0, 10)}. The owner is James — ALL owner-addressed mail goes to ${config.ownerEmail}, never a placeholder.`,
     modeBanner,
+    `TASK ADDRESSING: when a tool takes an \`agent\` value, it MUST be an exact registry key (ceo, auditor, chief-of-staff, analyst, trivia-ops-director, trivia-creation, trivia-qa, dev-features, dev-maintenance, qa-tester, ads-implementation, marketing-director, venue-search, venue-outreach, user-growth, ads-recruit, ads-outreach, social-media, website-content, cx-director, venue-success, user-support, ads-support, bizops-director, finance, ad-sales, contracts, data-steward) or omitted for director triage — never an invented name.`,
     `RUN CONTRACT: read the doctrine below, do today's work with your tools, and END with your run report in this exact shape:\n\nREPORT\ndone: <bullet lines, each with its artifact (row id / outbox file)>\nblocked: <or "nothing">\nlearned: <one or two lines>\nnext: <what tomorrow's run should pick up>\n\nEvery claimed completion MUST name an artifact — unverifiable claims are incidents (blueprint §11). Silence is the only forbidden outcome.`,
     `# CORE DOCTRINE\n${coreDoctrine()}`,
     `# YOUR ROLE CARD\n${roleCard(roleKey)}`,

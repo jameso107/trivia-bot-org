@@ -41,18 +41,23 @@ npm run seed:signup    # create a REAL venue signup via the app's own RPC
 - **Gated actions** become `approvals` rows + outbox records, never actions.
 - **KILL SWITCH**: the daemon is one process — stop it and the org stops.
 
-## Phase-A roster & cadence (America/Detroit)
+## The full 28-card roster
 
-| Agent | When | Job |
+All 28 registry roles are defined and runnable (`npm run once -- <role>`); the
+scheduler activates only roles whose phase ≤ `ORG_PHASE` — hiring is a config
+change. Current default: **Phase A** (8 scheduled).
+
+| Phase | Agents | Cadence highlights |
 |---|---|---|
-| ceo | daily 07:00 | KPI snapshot (deterministic `compute_kpis`), directives, owner brief |
-| trivia-ops-director | 07:30 | decompose directives → creation/QA tasks |
-| marketing-director | 07:35 | funnel plan; outreach stays gated |
-| venue-search | 09:00 | evidence-first lead building (web search; research-only) |
-| venue-success | hourly :15 | consume `venue_signup` events → onboarding |
-| trivia-creation | 02:00 | one style-guide pack → `qa_pending` |
-| trivia-qa | 03:00 | rule disputes; verify + promote/reject one pack |
-| auditor | Sun 18:00 | sample outputs vs policy; brain-gardening proposals |
+| **A** (boot) | ceo · auditor · trivia-ops-director · marketing-director · venue-search · venue-success · trivia-creation · trivia-qa | ceo 07:00 · signup-watch hourly · content pipeline 02:00/03:00 · auditor Sun 18:00 |
+| **B** (harden) | chief-of-staff · analyst · cx-director · user-support · venue-outreach · social-media · dev-maintenance · bizops-director · finance · contracts · data-steward | analyst 06:30 · CoS 07:30+13:00 · support hourly · finance 17:00 |
+| **C** (scale) | user-growth · ads-recruit · ads-outreach · ads-support · ad-sales · ads-implementation · website-content | weekly motions |
+
+Code-enforced beyond prompts: outreach is **triple-locked** (`ORG_MODE=live` +
+`OUTREACH_ENABLED=true` + an approved canary row) with suppression, the 25/day
+ramp cap, and CAN-SPAM checks evaluated per send; sponsors can't self-advance
+past `proposal` (signatures are the owner's alone); contracts/social/SEO
+output as outbox drafts until channels exist.
 
 **Deviation from the blueprint, on purpose** (decision D-007 in the brain):
 Phase A runs as this standalone daemon (owner-directed) rather than Cowork

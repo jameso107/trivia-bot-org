@@ -3,7 +3,7 @@
 // records them to the outbox as would-do), and 'external' actions (email)
 // ALWAYS outbox in Phase A — no mail credentials exist yet, by design.
 import { db } from "./db.js";
-import { isDry } from "./config.js";
+import { config, isDry } from "./config.js";
 import { writeOutbox } from "./outbox.js";
 import { computeKpis } from "./kpis.js";
 
@@ -154,23 +154,30 @@ export const TOOLBELT: Record<string, OrgTool> = {
 
   update_task: writeTool({
     name: "update_task",
-    description: "Update a task's status; link the artifact that proves completion.",
+    description:
+      "Update a task: status, artifact link, reassignment (agent), or priority. chief-of-staff uses reassignment to unstick stalled work.",
     parameters: {
       type: "object",
       properties: {
         task_id: { type: "string" },
         status: { type: "string", enum: ["open", "claimed", "done", "blocked", "archived"] },
         output_ref: { type: "string" },
+        agent: { type: "string", description: "reassign to this registry key" },
+        priority: { type: "number" },
       },
       required: ["task_id", "status"],
       additionalProperties: false,
     },
-    note: (a) => `task ${a.task_id} → ${a.status}`,
+    note: (a) => `task ${a.task_id} → ${a.status}${a.agent ? ` (reassigned: ${a.agent})` : ""}`,
     async live(args, ctx) {
-      const { error } = await db()
-        .from("tasks")
-        .update({ status: args.status, output_ref: args.output_ref ?? null, updated_at: new Date().toISOString() })
-        .eq("id", args.task_id);
+      const patch: Record<string, unknown> = {
+        status: args.status,
+        output_ref: args.output_ref ?? null,
+        updated_at: new Date().toISOString(),
+      };
+      if (args.agent) patch.agent = args.agent;
+      if (args.priority) patch.priority = args.priority;
+      const { error } = await db().from("tasks").update(patch).eq("id", args.task_id);
       if (error) return { error: error.message };
       ctx.artifacts.push(`tasks:${args.task_id}`);
       return { updated: true };
@@ -362,6 +369,247 @@ export const TOOLBELT: Record<string, OrgTool> = {
     },
   }),
 };
+
+// ---- Phase B/C tool additions ----
+
+TOOLBELT.update_lead = writeTool({
+  name: "update_lead",
+  description: "Update a lead's status/score/evidence (funnel states per the org schema). Suppression is permanent — never un-suppress.",
+  parameters: {
+    type: "object",
+    properties: {
+      lead_id: { type: "string" },
+      status: {
+        type: "string",
+        enum: ["new", "enriched", "sequenced", "replied", "signed_up", "nurture", "suppressed", "archived"],
+      },
+      score: { type: "number" },
+      suppressed_reason: { type: "string" },
+    },
+    required: ["lead_id", "status"],
+    additionalProperties: false,
+  },
+  note: (a) => `lead ${a.lead_id} → ${a.status}`,
+  async live(args, ctx) {
+    const { data: current } = await db().from("leads").select("status").eq("id", args.lead_id).maybeSingle();
+    if (current?.status === "suppressed" && args.status !== "suppressed") {
+      return { error: "suppression is permanent (policies §3)" };
+    }
+    const patch: Record<string, unknown> = { status: args.status, updated_at: new Date().toISOString() };
+    if (args.score !== undefined) patch.score = args.score;
+    if (args.suppressed_reason) patch.suppressed_reason = args.suppressed_reason;
+    const { error } = await db().from("leads").update(patch).eq("id", args.lead_id);
+    if (error) return { error: error.message };
+    ctx.artifacts.push(`leads:${args.lead_id}`);
+    return { updated: true };
+  },
+});
+
+// Outreach is TRIPLE-LOCKED in code (policies §3), not in prompts:
+// live mode + OUTREACH_ENABLED env + an approved canary approvals row —
+// and even then the suppression list and daily ramp cap are checked here.
+// Until mail credentials exist this still outboxes, but every lock is real.
+TOOLBELT.send_outreach = writeTool({
+  name: "send_outreach",
+  description:
+    "Send ONE outreach email to a lead within an owner-approved sequence. Hard-gated in code: approved canary, ramp caps, permanent suppression list, CAN-SPAM footer required. Logs the outreach_event.",
+  external: true, // Phase A/B without mail creds: always outbox — locks below still evaluated first
+  parameters: {
+    type: "object",
+    properties: {
+      lead_id: { type: "string" },
+      sequence: { type: "string", description: "approved sequence name" },
+      touch: { type: "number", description: "1-3" },
+      subject: { type: "string" },
+      body: { type: "string", description: "must include truthful sender identity, unsubscribe, postal address" },
+    },
+    required: ["lead_id", "sequence", "touch", "subject", "body"],
+    additionalProperties: false,
+  },
+  note: (a) => `outreach [${a.sequence} t${a.touch}] → lead ${a.lead_id}: ${a.subject}`,
+  async live() {
+    return { error: "unreachable: outreach outboxes until mail credentials exist" };
+  },
+});
+// Wrap send_outreach's guard: evaluate the locks BEFORE outboxing so a
+// blocked send is visibly blocked, not quietly recorded as a would-do.
+{
+  const base = TOOLBELT.send_outreach;
+  TOOLBELT.send_outreach = {
+    ...base,
+    async run(args, ctx) {
+      const locks: string[] = [];
+      if (isDry()) locks.push("ORG_MODE=dry");
+      if (!config.outreachEnabled) locks.push("OUTREACH_ENABLED is false");
+      const { data: approval } = await db()
+        .from("approvals")
+        .select("id, status")
+        .eq("action_class", "outreach.sequence.canary_send")
+        .eq("status", "approved")
+        .limit(1);
+      if (!approval || approval.length === 0) locks.push("no approved canary in approvals");
+      const { data: lead } = await db().from("leads").select("status, contact_email").eq("id", args.lead_id).maybeSingle();
+      if (!lead) locks.push("lead not found");
+      if (lead?.status === "suppressed") locks.push("lead is SUPPRESSED (permanent)");
+      if (!lead?.contact_email) locks.push("lead has no contact email");
+      const today = new Date().toISOString().slice(0, 10);
+      const { count: sentToday } = await db()
+        .from("outreach_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event", "sent")
+        .gte("created_at", `${today}T00:00:00Z`);
+      if ((sentToday ?? 0) >= 25) locks.push("daily ramp cap reached (25/day canary tier)");
+      const bodyLower = String(args.body).toLowerCase();
+      if (!bodyLower.includes("unsubscribe")) locks.push("body missing unsubscribe (CAN-SPAM)");
+
+      if (locks.length > 0) {
+        return { sent: false, blocked_by: locks, note: "outreach locks are code, not judgment — resolve them or file_approval" };
+      }
+      return base.run(args, ctx); // external → outbox until mail creds exist
+    },
+  };
+}
+
+TOOLBELT.log_outreach_event = writeTool({
+  name: "log_outreach_event",
+  description: "Record an outreach lifecycle event (sent/delivered/bounced/replied/unsubscribed/complaint) for a lead — deliverability KPIs read from here.",
+  parameters: {
+    type: "object",
+    properties: {
+      lead_id: { type: "string" },
+      sequence: { type: "string" },
+      touch: { type: "number" },
+      event: { type: "string", enum: ["sent", "delivered", "bounced", "replied", "unsubscribed", "complaint"] },
+      message_id: { type: "string" },
+      meta: { type: "object", additionalProperties: true },
+    },
+    required: ["lead_id", "sequence", "touch", "event"],
+    additionalProperties: false,
+  },
+  note: (a) => `outreach_event ${a.event} [${a.sequence} t${a.touch}] lead ${a.lead_id}`,
+  async live(args, ctx) {
+    const { data, error } = await db().from("outreach_events").insert(args).select("id").single();
+    if (error) return { error: error.message };
+    ctx.artifacts.push(`outreach_events:${data.id}`);
+    return { logged: true };
+  },
+});
+
+TOOLBELT.update_feedback = writeTool({
+  name: "update_feedback",
+  description: "user-support: move a feedback row through its queue (new → triaged → done). Convert bugs into dev task rows before marking done.",
+  parameters: {
+    type: "object",
+    properties: {
+      feedback_id: { type: "string" },
+      status: { type: "string", enum: ["new", "triaged", "done"] },
+    },
+    required: ["feedback_id", "status"],
+    additionalProperties: false,
+  },
+  note: (a) => `feedback ${a.feedback_id} → ${a.status}`,
+  async live(args, ctx) {
+    const { error } = await db().from("feedback").update({ status: args.status }).eq("id", args.feedback_id);
+    if (error) return { error: error.message };
+    ctx.artifacts.push(`feedback:${args.feedback_id}`);
+    return { updated: true };
+  },
+});
+
+TOOLBELT.insert_ledger_entry = writeTool({
+  name: "insert_ledger_entry",
+  description: "finance: record a non-inference money event (tool/infra cost, revenue, refund). Inference is metered automatically — never double-log it.",
+  parameters: {
+    type: "object",
+    properties: {
+      kind: { type: "string", enum: ["tool", "infra", "revenue", "refund", "other"] },
+      amount_usd: { type: "number", description: "negative = cost, positive = revenue" },
+      dept: { type: "string" },
+      memo: { type: "string" },
+      artifact_ref: { type: "string" },
+    },
+    required: ["kind", "amount_usd", "memo"],
+    additionalProperties: false,
+  },
+  note: (a) => `ledger ${a.kind}: $${a.amount_usd} — ${a.memo}`,
+  async live(args, ctx) {
+    const { data, error } = await db()
+      .from("ledger")
+      .insert({ ...args, agent: ctx.agent })
+      .select("id")
+      .single();
+    if (error) return { error: error.message };
+    ctx.artifacts.push(`ledger:${data.id}`);
+    return { logged: true };
+  },
+});
+
+TOOLBELT.upsert_sponsor = writeTool({
+  name: "upsert_sponsor",
+  description:
+    "ads pipeline: insert a sponsor prospect or advance its status (prospect→pitched→proposal→signed→live→churned). 'signed' and beyond require an owner-approved IO — file_approval first; never self-advance past proposal.",
+  parameters: {
+    type: "object",
+    properties: {
+      sponsor_id: { type: "string", description: "omit to insert a new prospect" },
+      business: { type: "string" },
+      contact_email: { type: "string" },
+      package: { type: "string" },
+      mrr_usd: { type: "number" },
+      status: { type: "string", enum: ["prospect", "pitched", "proposal"] },
+    },
+    required: ["business", "status"],
+    additionalProperties: false,
+  },
+  note: (a) => `sponsor ${a.business} → ${a.status}`,
+  async live(args, ctx) {
+    if (args.sponsor_id) {
+      const { error } = await db()
+        .from("sponsors")
+        .update({ status: args.status, package: args.package ?? null, mrr_usd: args.mrr_usd ?? null })
+        .eq("id", args.sponsor_id);
+      if (error) return { error: error.message };
+      ctx.artifacts.push(`sponsors:${args.sponsor_id}`);
+      return { updated: true };
+    }
+    const { data, error } = await db()
+      .from("sponsors")
+      .insert({
+        business: args.business, contact_email: args.contact_email ?? null,
+        package: args.package ?? null, mrr_usd: args.mrr_usd ?? null, status: args.status,
+      })
+      .select("id")
+      .single();
+    if (error) return { error: error.message };
+    ctx.artifacts.push(`sponsors:${data.id}`);
+    return { sponsor_id: data.id };
+  },
+});
+
+TOOLBELT.draft_artifact = writeTool({
+  name: "draft_artifact",
+  description:
+    "Produce a reviewable draft that has no execution channel yet: contracts (ALWAYS drafts — policies §1), social posts, SEO pages, board packets, incident postmortems. Lands in the outbox with a kind tag for the owner or downstream agent.",
+  external: true,
+  parameters: {
+    type: "object",
+    properties: {
+      kind: {
+        type: "string",
+        enum: ["contract", "social_post", "seo_page", "board_packet", "postmortem", "playbook_diff", "other"],
+      },
+      title: { type: "string" },
+      content: { type: "string", description: "the complete draft, markdown" },
+      needs: { type: "string", description: "what must happen next (owner signature, dev publish task, counsel review...)" },
+    },
+    required: ["kind", "title", "content", "needs"],
+    additionalProperties: false,
+  },
+  note: (a) => `draft [${a.kind}]: ${a.title} — needs: ${a.needs}`,
+  async live() {
+    return { error: "unreachable: drafts always land in the outbox" };
+  },
+});
 
 // ---- content pipeline (PRD §9: creation INSERTs qa_pending; qa flips) ----
 

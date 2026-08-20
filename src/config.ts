@@ -16,6 +16,20 @@ export const config = {
   maxRunUsd: Number(process.env.MAX_RUN_USD ?? 1),
   brainPath: process.env.BRAIN_PATH ?? "../trivia-bot-brain",
   ownerEmail: process.env.OWNER_EMAIL ?? "james@syzygy.services",
+  // Which phases the SCHEDULER activates (blueprint: grow into the org chart).
+  // A = boot roster · B = hardening roster · C = scale roster.
+  // `once <role>` can always run any defined role regardless of phase.
+  phase: (["A", "B", "C"].includes(process.env.ORG_PHASE ?? "A")
+    ? (process.env.ORG_PHASE ?? "A")
+    : "A") as "A" | "B" | "C",
+  // Outreach stays triple-locked (policies §3): live mode AND this flag AND an
+  // approved canary row. Until all three, sends are outbox records.
+  outreachEnabled: process.env.OUTREACH_ENABLED === "true",
 };
+
+export function phaseActive(rolePhase: "A" | "B" | "C"): boolean {
+  const order = { A: 0, B: 1, C: 2 };
+  return order[rolePhase] <= order[config.phase];
+}
 
 export const isDry = () => config.mode === "dry";

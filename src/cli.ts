@@ -6,7 +6,7 @@
 import { readdirSync } from "node:fs";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
-import { config, isDry } from "./config.js";
+import { config, isDry, phaseActive } from "./config.js";
 import { db } from "./db.js";
 import { runAgent } from "./agent.js";
 import { ROLES, type RoleKey } from "./roles.js";
@@ -93,23 +93,35 @@ async function dryrun() {
 }
 
 async function daemon() {
-  console.log(`trivia-bot-org daemon up · mode=${config.mode} · model=${config.model} · TZ America/Detroit`);
+  console.log(`trivia-bot-org daemon up · mode=${config.mode} · model=${config.model} · phase=${config.phase} · TZ America/Detroit`);
   console.log("KILL SWITCH: stop this process (ctrl-C / kill). Nothing else schedules work.");
   const tz = { timezone: "America/Detroit" };
-  cron.schedule("0 7 * * *", () => void runAgent("ceo"), tz);
-  cron.schedule("30 7 * * *", () => void runAgent("trivia-ops-director"), tz);
-  cron.schedule("35 7 * * *", () => void runAgent("marketing-director"), tz);
-  cron.schedule("0 9 * * *", () => void runAgent("venue-search"), tz);
-  cron.schedule("15 * * * *", () => void runAgent("venue-success"), tz); // signup poll (Phase A)
-  cron.schedule("0 2 * * *", () => void runAgent("trivia-creation"), tz);
-  cron.schedule("0 3 * * *", () => void runAgent("trivia-qa"), tz);
-  cron.schedule("0 18 * * 0", () => void runAgent("auditor"), tz);
+  let active = 0;
+  let benched = 0;
+  for (const [key, role] of Object.entries(ROLES) as [RoleKey, (typeof ROLES)[RoleKey]][]) {
+    if (!phaseActive(role.phase)) {
+      benched++;
+      continue;
+    }
+    for (const expr of role.cadence) {
+      cron.schedule(expr, () => void runAgent(key), tz);
+    }
+    if (role.cadence.length > 0) active++;
+  }
+  console.log(
+    `roster: ${active} agents scheduled (phase ≤ ${config.phase}); ${benched} defined but benched — raise ORG_PHASE to hire them. dev-features/qa-tester run in the Claude Code builder pod (D-007).`,
+  );
 }
 
 const main = async () => {
   switch (cmd) {
     case "once": {
       const role = assertRole(rest.find((a) => !a.startsWith("--")));
+      if (!phaseActive(ROLES[role].phase)) {
+        console.log(
+          `note: ${role} is a Phase-${ROLES[role].phase} hire (current ORG_PHASE=${config.phase}) — running on demand anyway; the daemon won't schedule it until you raise the phase.`,
+        );
+      }
       if (rest.includes("--live")) process.env.ORG_MODE = "live"; // config already parsed; guard:
       if (rest.includes("--live") && config.mode !== "live") {
         console.error("to run live, set ORG_MODE=live in .env (explicit beats flags for something this sharp)");
