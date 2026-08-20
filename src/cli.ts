@@ -4,6 +4,7 @@
 //   npm run daemon                                    the scheduled heartbeat
 //   npm run seed:signup                               a REAL venue signup via the app's own RPC
 import { readdirSync } from "node:fs";
+import { hostname } from "node:os";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
 import { config, isDry, phaseActive } from "./config.js";
@@ -94,8 +95,31 @@ async function dryrun() {
 
 async function daemon() {
   console.log(`trivia-bot-org daemon up · mode=${config.mode} · model=${config.model} · phase=${config.phase} · TZ America/Detroit`);
-  console.log("KILL SWITCH: stop this process (ctrl-C / kill). Nothing else schedules work.");
+  console.log("KILL SWITCH: the console's Controls page (org_flags.kill_switch) — or stop this process.");
   const tz = { timezone: "America/Detroit" };
+
+  // Liveness for the console: org_flags.daemon_heartbeat, stamped on boot and
+  // every minute. The console reads OFFLINE at >150s stale.
+  const upSince = new Date().toISOString();
+  const beat = () =>
+    void db()
+      .from("org_flags")
+      .upsert({
+        key: "daemon_heartbeat",
+        value: {
+          at: new Date().toISOString(),
+          up_since: upSince,
+          mode: config.mode,
+          phase: config.phase,
+          model: config.model,
+          host: hostname(),
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .then(({ error }) => {
+        if (error) console.warn(`heartbeat write failed: ${error.message}`);
+      });
+  beat();
   let active = 0;
   let benched = 0;
   for (const [key, role] of Object.entries(ROLES) as [RoleKey, (typeof ROLES)[RoleKey]][]) {
@@ -115,6 +139,7 @@ async function daemon() {
   // Console "Run now" requests: poll minutely, execute serially, cheaply.
   let working = false;
   cron.schedule("* * * * *", async () => {
+    beat(); // before the guard — a long request run must not read as an outage
     if (working) return;
     working = true;
     try {

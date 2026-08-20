@@ -9,7 +9,7 @@ const DAY = 24 * 3600 * 1000;
 export default async function Overview() {
   const today = new Date().toISOString().slice(0, 10);
   const d = db();
-  const [kpis, ledgerToday, runs24, approvals, incidents, events, tasks, brief, requests] =
+  const [kpis, ledgerToday, runs24, approvals, incidents, events, tasks, brief, requests, heartbeat] =
     await Promise.all([
       d.from("kpis_daily").select("day, metrics, note").order("day", { ascending: false }).limit(1).maybeSingle(),
       d.from("ledger").select("amount_usd").eq("kind", "inference").eq("entry_date", today),
@@ -27,6 +27,7 @@ export default async function Overview() {
         .limit(1)
         .maybeSingle(),
       d.from("agent_run_requests").select("id, agent, status, created_at").order("created_at", { ascending: false }).limit(5),
+      d.from("org_flags").select("value").eq("key", "daemon_heartbeat").maybeSingle(),
     ]);
 
   const spendToday = (ledgerToday.data ?? []).reduce((a, r) => a + Math.abs(Number(r.amount_usd)), 0);
@@ -35,6 +36,8 @@ export default async function Overview() {
   const stalled = (tasks.data ?? []).filter((t) => Date.parse(t.updated_at as string) < Date.now() - 2 * DAY).length;
   const metrics = (kpis.data?.metrics ?? {}) as Record<string, number | null>;
   const briefPayload = (brief.data?.payload ?? null) as { subject?: string; body?: string } | null;
+  const hb = (heartbeat.data?.value ?? null) as { at?: string; mode?: string; phase?: string; host?: string } | null;
+  const daemonUp = !!hb?.at && Date.now() - Date.parse(hb.at) < 150_000;
 
   return (
     <>
@@ -46,6 +49,18 @@ export default async function Overview() {
       </header>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Daemon"
+          value={daemonUp ? "LIVE" : "OFFLINE"}
+          sub={
+            hb?.at
+              ? daemonUp
+                ? `${hb.mode} · phase ${hb.phase} · ${hb.host}`
+                : `last beat ${timeAgo(hb.at)}`
+              : "never seen — start it"
+          }
+          tone={daemonUp ? "good" : "bad"}
+        />
         <StatCard
           label="Venue-nights (7d)"
           value={metrics.weekly_active_venue_nights ?? "—"}
@@ -132,9 +147,11 @@ export default async function Overview() {
             </tr>
           ))}
         </Table>
-        <p className="text-xs text-zinc-500">
-          Run requests execute within a minute while the daemon is up (`npm run daemon` on the org machine).
-        </p>
+        {daemonUp ? (
+          <p className="text-xs text-zinc-500">The daemon is live — run requests execute within a minute.</p>
+        ) : (
+          <p className="text-xs text-amber-300">The daemon is OFFLINE — requests queue here until it&apos;s back up.</p>
+        )}
       </Section>
     </>
   );

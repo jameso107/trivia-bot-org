@@ -10,6 +10,10 @@ export default async function ControlsPage() {
   const killed = flag("kill_switch")?.value === true;
   const paused = (flag("paused_agents")?.value as string[] | undefined) ?? [];
   const budget = flag("daily_budget_usd_override")?.value;
+  const hb = flag("daemon_heartbeat")?.value as
+    | { at?: string; up_since?: string; mode?: string; phase?: string; model?: string; host?: string }
+    | undefined;
+  const daemonUp = !!hb?.at && Date.now() - Date.parse(hb.at) < 150_000;
 
   return (
     <>
@@ -19,6 +23,27 @@ export default async function ControlsPage() {
           The org_flags control plane. The daemon re-reads these before EVERY run — changes bite within a minute.
         </p>
       </header>
+
+      <Section title="Daemon host">
+        <div className={`rounded-xl border p-5 ${daemonUp ? "border-zinc-800 bg-zinc-900" : "border-amber-800 bg-amber-950/40"}`}>
+          <p className="text-lg font-bold">{daemonUp ? "🟢 Daemon LIVE" : "🟡 Daemon OFFLINE"}</p>
+          {hb?.at ? (
+            <p className="mt-1 text-sm text-zinc-400">
+              <span className="font-mono">{hb.host}</span> · mode <span className="font-mono">{hb.mode}</span> · phase{" "}
+              <span className="font-mono">{hb.phase}</span> · model <span className="font-mono">{hb.model}</span> · last
+              beat {timeAgo(hb.at)}
+              {hb.up_since ? ` · up since ${new Date(hb.up_since).toLocaleString("en-US", { timeZone: "America/Detroit" })} ET` : ""}
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-zinc-400">No heartbeat has ever been written — the daemon has not run since this feature shipped.</p>
+          )}
+          <p className="mt-2 text-xs text-zinc-500">
+            Heartbeats write to org_flags every minute. Mode, phase, and model are env vars on the daemon&apos;s host
+            (Railway → Variables → redeploy) — deliberate restarts, not remote switches. Run exactly ONE daemon at a
+            time: cloud up means the laptop copy stays off.
+          </p>
+        </div>
+      </Section>
 
       <Section title="Kill switch">
         <div className={`flex items-center justify-between rounded-xl border p-5 ${killed ? "border-red-800 bg-red-950" : "border-zinc-800 bg-zinc-900"}`}>

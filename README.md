@@ -5,7 +5,8 @@ against the shared Supabase database, exactly through the contract in the
 product PRD §9. No agent ever touches the product's UI.
 
 - **Doctrine** lives in [`trivia-bot-brain`](https://github.com/jameso107/trivia-bot-brain)
-  (cloned as a sibling directory — `BRAIN_PATH`). Every run re-reads it.
+  (a sibling checkout locally; in the cloud, fetched at boot by
+  `scripts/fetch-brain.mjs` — `BRAIN_PATH` either way). Every run re-reads it.
 - **State** lives in Supabase (`tasks`, `runs`, `events`, `approvals`,
   `ledger`, `kpis_daily`, …). A run's legacy is only what it writes back.
 - **Product** is [`trivia-bot-app`](https://github.com/jameso107/trivia-bot-app);
@@ -23,6 +24,58 @@ npm run daemon         # the scheduled heartbeat (see cadences below)
 npm run seed:signup    # create a REAL venue signup via the app's own RPC
 ```
 
+## Run it in the cloud (Railway) — decision D-009
+
+The daemon is worker-shaped (no inbound port, minute-level cron, long runs), so
+it runs as an always-on Railway service built from this repo's `Dockerfile`.
+One repo, two deploy targets: Railway runs the daemon from the repo root;
+Vercel builds the console from `web/`.
+
+**One-time setup:**
+
+1. **GitHub token** — github.com → Settings → Developer settings →
+   Fine-grained tokens → new token, repository access: **only
+   `trivia-bot-brain`**, permissions: **Contents: Read-only**. Copy it —
+   it's pasted into Railway in step 3 and nowhere else.
+2. **Railway project** — [railway.com](https://railway.com) → New Project →
+   Deploy from GitHub repo → `jameso107/trivia-bot-org` (install the Railway
+   GitHub app when prompted). It detects the Dockerfile automatically. Pick a
+   **US East** region (Supabase lives in us-east-2). Hobby plan (~$5/mo,
+   includes usage that covers this worker).
+3. **Variables** (service → Variables):
+
+   | var | value |
+   |---|---|
+   | `OPENAI_API_KEY` | the OpenAI key |
+   | `SUPABASE_URL` | `https://oiwjmmnjjeodbwozbvhu.supabase.co` |
+   | `SUPABASE_SECRET_KEY` | the service-role secret |
+   | `GITHUB_TOKEN` | the PAT from step 1 |
+   | `ORG_MODE` | `dry` (flip to `live` here later — edits auto-redeploy) |
+
+   Optional overrides (defaults are baked in): `ORG_PHASE`, `ORG_MODEL`,
+   `DAILY_BUDGET_USD`, `MAX_RUN_USD`, `OWNER_EMAIL`. `BRAIN_PATH=brain` is set
+   by the Dockerfile. `SUPABASE_PUBLISHABLE_KEY` isn't needed (seed-signup is
+   a local-only helper).
+4. **Verify** — deploy logs show `brain: doctrine ready …` then the roster
+   line; the console's overview shows **Daemon LIVE** within a minute (the
+   daemon heartbeats `org_flags.daemon_heartbeat` every 60s; the console calls
+   it OFFLINE at >150s stale).
+5. **Turn the laptop copy off.** Exactly one daemon at a time — two would
+   double-run every schedule.
+
+**Operating it:**
+
+- **Doctrine updates**: the container fetches `trivia-bot-brain@main` at every
+  boot, so brain pushes reach the daemon on the next restart/redeploy
+  (Railway → service → Restart). Code pushes to this repo auto-redeploy.
+- **Mode/phase/model/budget-default changes**: edit the Railway variable — it
+  redeploys. Kill switch, per-agent pauses, and the daily-budget *override*
+  stay remote-instant via the console (org_flags).
+- **`outbox/*.json` files are ephemeral** in a container; the DB mirror
+  (`outbox_records`, what the console reads) is the durable record.
+- **Crash = auto-restart** (Railway restart policy) — and every run is in
+  `runs` either way; the auditor and chief-of-staff sweep stranded work.
+
 ## Modes
 
 - `ORG_MODE=dry` — reads are real; every write/email is recorded to
@@ -39,7 +92,9 @@ npm run seed:signup    # create a REAL venue signup via the app's own RPC
   trivia-qa holds `set_pack_status`, and the live-promotion bar
   (confidence ≥0.9, zero flags) is enforced mechanically, not by prompt.
 - **Gated actions** become `approvals` rows + outbox records, never actions.
-- **KILL SWITCH**: the daemon is one process — stop it and the org stops.
+- **KILL SWITCH**: the console's Controls page flips `org_flags.kill_switch`,
+  which the daemon re-reads before EVERY run — works from anywhere. Stopping
+  the daemon process kills everything too.
 
 ## The full 28-card roster
 

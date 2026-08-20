@@ -1,0 +1,12 @@
+node_modules
+web
+outbox
+reports
+brain
+sql
+.git
+.github
+.env
+.env.*
+*.md
+.DS_Store
