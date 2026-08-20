@@ -111,6 +111,41 @@ async function daemon() {
   console.log(
     `roster: ${active} agents scheduled (phase ≤ ${config.phase}); ${benched} defined but benched — raise ORG_PHASE to hire them. dev-features/qa-tester run in the Claude Code builder pod (D-007).`,
   );
+
+  // Console "Run now" requests: poll minutely, execute serially, cheaply.
+  let working = false;
+  cron.schedule("* * * * *", async () => {
+    if (working) return;
+    working = true;
+    try {
+      const { data: reqs } = await db()
+        .from("agent_run_requests")
+        .select("id, agent")
+        .eq("status", "pending")
+        .order("created_at")
+        .limit(3);
+      for (const req of reqs ?? []) {
+        if (!(req.agent in ROLES)) {
+          await db().from("agent_run_requests").update({ status: "skipped" }).eq("id", req.id);
+          continue;
+        }
+        await db()
+          .from("agent_run_requests")
+          .update({ status: "started", started_at: new Date().toISOString() })
+          .eq("id", req.id);
+        console.log(`▶ console requested a run: ${req.agent}`);
+        const result = await runAgent(req.agent as RoleKey);
+        await db()
+          .from("agent_run_requests")
+          .update({ status: result.status === "failed" ? "failed" : "done", run_id: result.runId })
+          .eq("id", req.id);
+      }
+    } catch (e) {
+      console.warn(`run-request poll error: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      working = false;
+    }
+  }, tz);
 }
 
 const main = async () => {

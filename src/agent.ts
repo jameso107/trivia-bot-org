@@ -9,7 +9,7 @@ import { estimateUsd } from "./pricing.js";
 import { toolsFor, type OrgTool, type RunCtx } from "./tools.js";
 import { ROLES, type RoleKey } from "./roles.js";
 
-const MAX_TURNS = 12;
+const MAX_TURNS = 20;
 
 export interface RunResult {
   runId: string | null;
@@ -36,10 +36,26 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
     ? "MODE: DRY-RUN — reads are real; every write/email you attempt is RECORDED to the outbox instead of executed. Act exactly as you would live; the record IS the output."
     : "MODE: LIVE — writes execute. Policies gate what needs approval.";
 
+  // Remote control plane (org_flags — the console's switches) beats everything.
+  const { data: flags } = await db().from("org_flags").select("key, value");
+  const flag = (k: string) => flags?.find((f) => f.key === k)?.value;
+  if (flag("kill_switch") === true) {
+    console.log(`⛔ KILL SWITCH is on (org_flags) — skipping ${roleKey}`);
+    return { runId: null, status: "killed", spendUsd: 0, report: "kill switch active; run skipped", artifacts: [] };
+  }
+  const paused = (flag("paused_agents") as string[] | undefined) ?? [];
+  if (Array.isArray(paused) && paused.includes(roleKey)) {
+    console.log(`⏸ ${roleKey} is paused (org_flags.paused_agents) — skipping`);
+    return { runId: null, status: "killed", spendUsd: 0, report: "agent paused via console; run skipped", artifacts: [] };
+  }
+  const budgetOverride = flag("daily_budget_usd_override");
+  const dailyBudget =
+    typeof budgetOverride === "number" && budgetOverride > 0 ? budgetOverride : config.dailyBudgetUsd;
+
   // Budget precheck (policies §2: at 100% stop and escalate).
   const spentToday = await spentTodayUsd();
-  if (spentToday >= config.dailyBudgetUsd) {
-    console.log(`⛔ daily inference budget exhausted ($${spentToday.toFixed(2)}/$${config.dailyBudgetUsd}) — skipping ${roleKey}`);
+  if (spentToday >= dailyBudget) {
+    console.log(`⛔ daily inference budget exhausted ($${spentToday.toFixed(2)}/$${dailyBudget}) — skipping ${roleKey}`);
     return { runId: null, status: "killed", spendUsd: 0, report: "daily budget exhausted; run skipped", artifacts: [] };
   }
 
@@ -55,6 +71,7 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
     `You are the **${roleKey}** agent of Trivia Bot — a stateless worker in an agentic company. Today is ${new Date().toISOString().slice(0, 10)}. The owner is James — ALL owner-addressed mail goes to ${config.ownerEmail}, never a placeholder.`,
     modeBanner,
     `TASK ADDRESSING: when a tool takes an \`agent\` value, it MUST be an exact registry key (ceo, auditor, chief-of-staff, analyst, trivia-ops-director, trivia-creation, trivia-qa, dev-features, dev-maintenance, qa-tester, ads-implementation, marketing-director, venue-search, venue-outreach, user-growth, ads-recruit, ads-outreach, social-media, website-content, cx-director, venue-success, user-support, ads-support, bizops-director, finance, ad-sales, contracts, data-steward) or omitted for director triage — never an invented name.`,
+    `ECONOMY: batch your reads — one well-filtered query beats five narrow ones; every tool round-trip costs budget. Act, then report.`,
     `RUN CONTRACT: read the doctrine below, do today's work with your tools, and END with your run report in this exact shape:\n\nREPORT\ndone: <bullet lines, each with its artifact (row id / outbox file)>\nblocked: <or "nothing">\nlearned: <one or two lines>\nnext: <what tomorrow's run should pick up>\n\nEvery claimed completion MUST name an artifact — unverifiable claims are incidents (blueprint §11). Silence is the only forbidden outcome.`,
     `# CORE DOCTRINE\n${coreDoctrine()}`,
     `# YOUR ROLE CARD\n${roleCard(roleKey)}`,
@@ -128,9 +145,24 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
         status = "killed";
       }
       if (turn === MAX_TURNS - 1) {
-        report = "(run hit its turn ceiling before reporting)";
         status = "killed";
       }
+    }
+    // Never die silent: if the loop ended without a report, force one final
+    // no-tools turn to collect it (silence is the only forbidden outcome).
+    if (!report) {
+      input.push({
+        role: "user",
+        content: "STOP. Produce your REPORT now in the contracted shape — no more tool calls. Mark unfinished work as blocked.",
+      });
+      const wrap = await client.responses.create({
+        model: config.model,
+        instructions,
+        input,
+        max_output_tokens: 2000,
+      });
+      spend += estimateUsd(config.model, wrap.usage?.input_tokens ?? 0, wrap.usage?.output_tokens ?? 0);
+      report = wrap.output_text || "(no report produced even after wrap-up)";
     }
   } catch (e) {
     status = "failed";
