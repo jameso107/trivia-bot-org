@@ -115,8 +115,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
     phase: "A",
     cadence: ["15 * * * *"],
     docs: ["departments/customer-interaction/playbook.md", "departments/customer-interaction/venue-onboarding.md", REPORT_TABLES],
-    tools: ["query_org", "query_product", "create_task", "mark_event_processed", "send_email"],
-    goal: `The signup watch (PRD §9 contract): query_org events where kind=venue_signup and processed_at is null. For EACH: pull the venue row, then run the onboarding playbook — draft the welcome/onboarding email (send_email; outbox is expected), create the onboarding-checklist task rows (dry-run kit, first-night scheduling nudge, week-1 health check with due dates), and ONLY THEN mark_event_processed. Also sweep venues with last_night older than 10 days (query_org venues) and flag at-risk ones as tasks. If the queue is empty, say so plainly in your report.`,
+    tools: ["query_org", "query_product", "create_task", "mark_event_processed", "send_email", "read_email"],
+    goal: `The signup watch (PRD §9 contract): query_org events where kind=venue_signup and processed_at is null. For EACH: pull the venue row, then run the onboarding playbook — draft the welcome/onboarding email (send_email; outbox is expected), create the onboarding-checklist task rows (dry-run kit, first-night scheduling nudge, week-1 health check with due dates), and ONLY THEN mark_event_processed. ALSO the mail watch: query_org events where kind=email_received and processed_at is null; for each, read_email the message_id for full text, act per the playbook (draft the reply with send_email — Phase A transmits only owner-addressed mail, everything else outboxes send-ready; create tasks for real work; escalate anything unclear or sensitive as a P2 task titled 'OWNER: …'), then mark_event_processed. Also sweep venues with last_night older than 10 days (query_org venues) and flag at-risk ones as tasks. If the queues are empty, say so plainly in your report.`,
   },
 
   "trivia-creation": {

@@ -55,7 +55,9 @@ Vercel builds the console from `web/`.
    Optional overrides (defaults are baked in): `ORG_PHASE`, `ORG_MODEL`,
    `DAILY_BUDGET_USD`, `MAX_RUN_USD`, `OWNER_EMAIL`. Optional integrations:
    `FIRECRAWL_API_KEY` (real web search/scrape for venue-search, trivia-qa,
-   ads-recruit, website-content — without it those tools return a clear error). `BRAIN_PATH=brain` is set
+   ads-recruit, website-content — without it those tools return a clear error);
+   `AGENTMAIL_API_KEY` + `AGENTMAIL_INBOX` (the mail loop — without them
+   send_email outboxes everything and inbox polling is skipped). `BRAIN_PATH=brain` is set
    by the Dockerfile. `SUPABASE_PUBLISHABLE_KEY` isn't needed (seed-signup is
    a local-only helper).
 4. **Verify** — deploy logs show `brain: doctrine ready …` then the roster
@@ -83,8 +85,12 @@ Vercel builds the console from `web/`.
 - `ORG_MODE=dry` — reads are real; every write/email is recorded to
   `outbox/*.json` as a would-do instead of executing. Runs and spend still log
   to `runs`/`ledger` (bookkeeping is the org's own evidence).
-- `ORG_MODE=live` — writes execute. **Email still outboxes** (no mail
-  credentials exist in Phase A; the CEO's brief is a file you read).
+- `ORG_MODE=live` — writes execute. **Mail (D-010, AgentMail)**: only
+  owner-addressed email transmits (the CEO's brief arrives in your real
+  inbox); every other recipient still lands in the outbox send-ready, and
+  outreach transmits only once a dedicated sending domain exists. Inbound
+  mail to the org inbox is polled every 5 minutes into `events`
+  (`kind=email_received`) in EVERY mode — venue-success works that queue.
 
 ## Guardrails (enforced in code, per `company/policies.md`)
 

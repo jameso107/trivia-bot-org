@@ -6,6 +6,7 @@ import { db } from "./db.js";
 import { config, isDry } from "./config.js";
 import { writeOutbox } from "./outbox.js";
 import { computeKpis } from "./kpis.js";
+import { mailConfigured, readMessage, sendMail } from "./mail.js";
 
 export interface RunCtx {
   agent: string;
@@ -369,11 +370,13 @@ export const TOOLBELT: Record<string, OrgTool> = {
     },
   }),
 
+  // Phase A mail policy IN CODE (D-010): owner-addressed mail transmits for
+  // real (live mode + AgentMail configured); mail to anyone else is recorded
+  // to the outbox for the owner to review/forward. Dry mode records everything.
   send_email: writeTool({
     name: "send_email",
     description:
-      "Send an email (the CEO's daily brief, CX onboarding). Phase A has no mail credentials: ALWAYS lands in the outbox for the owner to see/send.",
-    external: true,
+      "Send an email (the CEO's daily brief, CX drafts). Phase A policy is enforced in code: only owner-addressed mail transmits; any other recipient lands in the outbox for the owner to review — write those drafts send-ready.",
     parameters: {
       type: "object",
       properties: {
@@ -385,10 +388,58 @@ export const TOOLBELT: Record<string, OrgTool> = {
       additionalProperties: false,
     },
     note: (a) => `email → ${a.to}: ${a.subject}`,
-    async live() {
-      return { error: "unreachable: external actions always outbox in Phase A" };
+    async live(args, ctx) {
+      const to = String(args.to);
+      const ownerBound = to.toLowerCase() === config.ownerEmail.toLowerCase();
+      if (!ownerBound || !mailConfigured()) {
+        const file = writeOutbox({
+          agent: ctx.agent,
+          mode: "live",
+          action: "send_email",
+          payload: args,
+          note: `email → ${to}: ${args.subject}${ownerBound ? " (mail not configured)" : " (Phase A: non-owner recipients outbox)"}`,
+        });
+        ctx.artifacts.push(file);
+        return {
+          recorded: true,
+          executed: false,
+          note: ownerBound
+            ? "AgentMail is not configured on this host — recorded to outbox"
+            : "Phase A policy: only owner-addressed mail transmits; recorded to outbox for the owner",
+        };
+      }
+      const out = await sendMail(to, String(args.subject), String(args.body));
+      if (out.error) return { sent: false, error: out.error };
+      const messageId = String(out.message_id ?? out.id ?? "sent");
+      ctx.artifacts.push(`agentmail:${messageId}`);
+      return { sent: true, message_id: messageId, via: config.agentmailInbox };
     },
   }),
+
+  read_email: {
+    name: "read_email",
+    description:
+      "Fetch one inbound email's full text by its message_id (from an email_received event). Truncated to 4000 chars.",
+    effect: "read",
+    parameters: {
+      type: "object",
+      properties: { message_id: { type: "string" } },
+      required: ["message_id"],
+      additionalProperties: false,
+    },
+    async run(args) {
+      const out = await readMessage(String(args.message_id));
+      if (out.error) return out;
+      return {
+        from: out.from ?? null,
+        to: out.to ?? null,
+        subject: out.subject ?? null,
+        timestamp: out.timestamp ?? null,
+        thread_id: out.thread_id ?? null,
+        text: String(out.text ?? "").slice(0, 4000),
+      };
+    },
+  },
 
   rule_dispute: writeTool({
     name: "rule_dispute",
@@ -496,7 +547,8 @@ TOOLBELT.update_lead = writeTool({
 // Outreach is TRIPLE-LOCKED in code (policies §3), not in prompts:
 // live mode + OUTREACH_ENABLED env + an approved canary approvals row —
 // and even then the suppression list and daily ramp cap are checked here.
-// Until mail credentials exist this still outboxes, but every lock is real.
+// Mail credentials now exist (D-010), but outreach transmits ONLY once a
+// dedicated sending domain does — until then it outboxes; locks still run.
 TOOLBELT.send_outreach = writeTool({
   name: "send_outreach",
   description:

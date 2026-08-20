@@ -9,6 +9,7 @@ import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
 import { config, isDry, phaseActive } from "./config.js";
 import { db } from "./db.js";
+import { ingestMail, mailConfigured } from "./mail.js";
 import { runAgent } from "./agent.js";
 import { ROLES, type RoleKey } from "./roles.js";
 
@@ -135,6 +136,20 @@ async function daemon() {
   console.log(
     `roster: ${active} agents scheduled (phase ≤ ${config.phase}); ${benched} defined but benched — raise ORG_PHASE to hire them. dev-features/qa-tester run in the Claude Code builder pod (D-007).`,
   );
+
+  // Inbound mail → events rows (kind=email_received), every 5 minutes.
+  // Ingest is observation, not action: it runs even under the kill switch,
+  // like the heartbeat — agents acting on the events is what the switch stops.
+  if (mailConfigured()) {
+    console.log(`mail: polling ${config.agentmailInbox} every 5m → events(kind=email_received)`);
+    cron.schedule("*/5 * * * *", async () => {
+      const r = await ingestMail();
+      if (r.ingested > 0) console.log(`✉ ingested ${r.ingested} inbound email(s) → events`);
+      if (r.error) console.warn(`mail ingest: ${r.error}`);
+    }, tz);
+  } else {
+    console.log("mail: not configured (AGENTMAIL_API_KEY/AGENTMAIL_INBOX) — send_email outboxes, no ingest");
+  }
 
   // Console "Run now" requests: poll minutely, execute serially, cheaply.
   let working = false;

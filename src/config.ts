@@ -28,6 +28,10 @@ export const config = {
   // Firecrawl (YC credits): real web search/scrape for the web-facing roles.
   // Optional — tools degrade to a clear error when unset.
   firecrawlKey: process.env.FIRECRAWL_API_KEY ?? "",
+  // AgentMail (D-010): the mail loop. Both optional — without them send_email
+  // outboxes everything and the daemon skips inbox polling.
+  agentmailKey: process.env.AGENTMAIL_API_KEY ?? "",
+  agentmailInbox: process.env.AGENTMAIL_INBOX ?? "",
 };
 
 export function phaseActive(rolePhase: "A" | "B" | "C"): boolean {
