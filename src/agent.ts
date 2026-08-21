@@ -19,15 +19,16 @@ export interface RunResult {
   artifacts: string[];
 }
 
-async function spentTodayUsd(): Promise<number> {
-  const today = new Date().toISOString().slice(0, 10);
+async function spentSinceUsd(sinceDate: string): Promise<number> {
   const { data } = await db()
     .from("ledger")
     .select("amount_usd")
     .eq("kind", "inference")
-    .eq("entry_date", today);
+    .gte("entry_date", sinceDate);
   return (data ?? []).reduce((a, r) => a + Math.abs(Number(r.amount_usd)), 0);
 }
+const spentTodayUsd = () => spentSinceUsd(new Date().toISOString().slice(0, 10));
+const spentMonthUsd = () => spentSinceUsd(new Date().toISOString().slice(0, 8) + "01");
 
 export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunResult> {
   const role = ROLES[roleKey];
@@ -57,6 +58,14 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
   if (spentToday >= dailyBudget) {
     console.log(`⛔ daily inference budget exhausted ($${spentToday.toFixed(2)}/$${dailyBudget}) — skipping ${roleKey}`);
     return { runId: null, status: "killed", spendUsd: 0, report: "daily budget exhausted; run skipped", artifacts: [] };
+  }
+  const monthlyOverride = flag("monthly_budget_usd_override");
+  const monthlyBudget =
+    typeof monthlyOverride === "number" && monthlyOverride > 0 ? monthlyOverride : config.monthlyBudgetUsd;
+  const spentMonth = await spentMonthUsd();
+  if (spentMonth >= monthlyBudget) {
+    console.log(`⛔ MONTHLY inference budget exhausted ($${spentMonth.toFixed(2)}/$${monthlyBudget}) — skipping ${roleKey}`);
+    return { runId: null, status: "killed", spendUsd: 0, report: "monthly budget exhausted; run skipped", artifacts: [] };
   }
 
   const { data: runRow } = await db()

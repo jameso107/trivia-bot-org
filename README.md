@@ -94,8 +94,10 @@ Vercel builds the console from `web/`.
 
 ## Guardrails (enforced in code, per `company/policies.md`)
 
-- **Budgets**: `DAILY_BUDGET_USD` checked before every run; `MAX_RUN_USD`
-  meters mid-run and forces a wrap-up. Every run writes a ledger row.
+- **Budgets**: `DAILY_BUDGET_USD` and `MONTHLY_BUDGET_USD` checked before
+  every run (org_flags `daily_budget_usd_override` / `monthly_budget_usd_override`
+  beat them, no redeploy); `MAX_RUN_USD` meters mid-run and forces a wrap-up.
+  Every run writes a ledger row.
 - **Tool allowlists per role** — venue-search can't touch packs; only
   trivia-qa holds `set_pack_status`, and the live-promotion bar
   (confidence ≥0.9, zero flags) is enforced mechanically, not by prompt.
