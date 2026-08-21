@@ -2,7 +2,9 @@ node_modules/
 .env
 .env.*
 !.env.example
-outbox/
-reports/
+# Root-anchored: these are the daemon's runtime dirs. Unanchored `outbox/`
+# once swallowed web/src/app/outbox/ — the console page never reached GitHub.
+/outbox/
+/reports/
 *.log
 .DS_Store
