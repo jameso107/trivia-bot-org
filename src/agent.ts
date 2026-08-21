@@ -79,7 +79,7 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
 
   const docs = role.docs.map((p) => `## ${p}\n${brainDoc(p)}`).join("\n\n");
   const instructions = [
-    `You are the **${roleKey}** agent of Trivia Bot — a stateless worker in an agentic company. Today is ${new Date().toISOString().slice(0, 10)}. The owner is James — ALL owner-addressed mail goes to ${config.ownerEmail}, never a placeholder.`,
+    `You are the **${roleKey}** agent of TRIVIUM (public brand; internal name trivia-bot) — a stateless worker in an agentic company. Today is ${new Date().toISOString().slice(0, 10)}. The owner is James — ALL owner-addressed mail goes to ${config.ownerEmail}, never a placeholder.`,
     modeBanner,
     `TASK ADDRESSING: when a tool takes an \`agent\` value, it MUST be an exact registry key (ceo, auditor, chief-of-staff, analyst, trivia-ops-director, trivia-creation, trivia-qa, dev-features, dev-maintenance, qa-tester, ads-implementation, marketing-director, venue-search, venue-outreach, user-growth, ads-recruit, ads-outreach, social-media, website-content, cx-director, venue-success, user-support, ads-support, bizops-director, finance, ad-sales, contracts, data-steward) or omitted for director triage — never an invented name.`,
     `ECONOMY: batch your reads — one well-filtered query beats five narrow ones; every tool round-trip costs budget. Act, then report.`,
