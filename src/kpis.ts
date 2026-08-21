@@ -44,6 +44,7 @@ export async function computeKpis() {
   // pack size isn't joined here, so Phase A approximates with the team floor.
   const runNights = nights.filter((n) => n.teams >= 3);
   notes.push("weekly_active_venue_nights approximated as game_completed with teams>=3 (question-share check lands with the analyst role)");
+  notes.push("agent_run_success_rate_24h measures ORG agent runs, not product games; venues with health.test=true are seed/test data — exclude them from venue reasoning");
 
   const upheld = (disputes.data ?? []).filter((x) => x.status === "upheld").length;
   const shippedQuestions = (livePacks.data ?? []).reduce((a, p) => a + Number(p.question_count ?? 0), 0);
@@ -68,7 +69,9 @@ export async function computeKpis() {
       pack_error_rate: shippedQuestions > 0 ? Number((upheld / shippedQuestions).toFixed(4)) : null,
       shipped_questions: shippedQuestions,
       open_disputes: (disputes.data ?? []).filter((x) => x.status === "open").length,
-      run_success_rate_24h: runsAll > 0 ? Number((runsOk / runsAll).toFixed(2)) : null,
+      // ORG agent runs (ok/total), NOT product game reliability — renamed
+      // 2026-08-21 after the CEO misread 0.86 here as a product bottleneck.
+      agent_run_success_rate_24h: runsAll > 0 ? Number((runsOk / runsAll).toFixed(2)) : null,
       stalled_tasks: stalled,
       spend_yesterday_usd: Number(
         (ledger1.data ?? []).reduce((a, r) => a + Math.min(0, Number(r.amount_usd)), 0).toFixed(4),
