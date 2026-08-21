@@ -32,6 +32,8 @@ const spentMonthUsd = () => spentSinceUsd(new Date().toISOString().slice(0, 8) +
 
 export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunResult> {
   const role = ROLES[roleKey];
+  const model = role.model ?? config.model;
+  const maxRunUsd = role.maxRunUsd ?? config.maxRunUsd;
   const client = new OpenAI({ apiKey: config.openaiKey });
   const modeBanner = isDry()
     ? "MODE: DRY-RUN — reads are real; every write/email you attempt is RECORDED to the outbox instead of executed. Act exactly as you would live; the record IS the output."
@@ -111,13 +113,13 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
   try {
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       const res = await client.responses.create({
-        model: config.model,
+        model,
         instructions,
         input,
         tools: apiTools as never,
         max_output_tokens: 6000,
       });
-      spend += estimateUsd(config.model, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
+      spend += estimateUsd(model, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
 
       const calls = res.output.filter((o) => o.type === "function_call");
       input = [...input, ...res.output] as OpenAI.Responses.ResponseInput;
@@ -146,7 +148,7 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
         });
       }
 
-      if (spend >= config.maxRunUsd) {
+      if (spend >= maxRunUsd) {
         input.push({
           role: "user",
           content: "BUDGET: this run hit its inference cap. Stop tool use and produce your REPORT now, marking unfinished work as blocked.",
@@ -165,12 +167,12 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
         content: "STOP. Produce your REPORT now in the contracted shape — no more tool calls. Mark unfinished work as blocked.",
       });
       const wrap = await client.responses.create({
-        model: config.model,
+        model,
         instructions,
         input,
         max_output_tokens: 2000,
       });
-      spend += estimateUsd(config.model, wrap.usage?.input_tokens ?? 0, wrap.usage?.output_tokens ?? 0);
+      spend += estimateUsd(model, wrap.usage?.input_tokens ?? 0, wrap.usage?.output_tokens ?? 0);
       report = wrap.output_text || "(no report produced even after wrap-up)";
     }
   } catch (e) {
@@ -195,7 +197,7 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
     agent: roleKey,
     dept: role.dept,
     amount_usd: -Number(spend.toFixed(4)),
-    memo: `${notePrefix}${config.model} run ${runId ?? "?"}`,
+    memo: `${notePrefix}${model} run ${runId ?? "?"}`,
   });
 
   console.log(`\n═══ ${roleKey} [${status}] $${spend.toFixed(4)} · artifacts: ${ctx.artifacts.length} ═══`);

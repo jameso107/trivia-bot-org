@@ -11,7 +11,10 @@ export const config = {
   supabaseUrl: required("SUPABASE_URL"),
   supabaseSecretKey: required("SUPABASE_SECRET_KEY"),
   mode: (process.env.ORG_MODE === "live" ? "live" : "dry") as "dry" | "live",
-  model: process.env.ORG_MODEL ?? "gpt-5-mini",
+  // Fleet default (owner decision 2026-08-21): gpt-5.6-luna — newer AND
+  // cheaper than gpt-5-mini. Judgment-critical roles override to terra in
+  // roles.ts. ORG_MODEL still beats this for the fleet.
+  model: process.env.ORG_MODEL ?? "gpt-5.6-luna",
   dailyBudgetUsd: Number(process.env.DAILY_BUDGET_USD ?? 5),
   monthlyBudgetUsd: Number(process.env.MONTHLY_BUDGET_USD ?? 100),
   maxRunUsd: Number(process.env.MAX_RUN_USD ?? 1),

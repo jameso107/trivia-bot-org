@@ -3,6 +3,9 @@
 // Unknown models fall back to the PESSIMISTIC rate so budget stops fire
 // early rather than late.
 const PRICES: Record<string, { in: number; out: number }> = {
+  // 5.6 family rates as of the 2026-07-30 price cut (openai.com pricing).
+  "gpt-5.6-terra": { in: 2, out: 12 },
+  "gpt-5.6-luna": { in: 0.2, out: 1.2 },
   "gpt-5": { in: 1.25, out: 10 },
   "gpt-5-mini": { in: 0.25, out: 2 },
   "gpt-5-nano": { in: 0.05, out: 0.4 },

@@ -117,6 +117,16 @@ export async function setBudgetOverride(formData: FormData) {
   revalidatePath("/controls");
 }
 
+export async function setMonthlyBudgetOverride(formData: FormData) {
+  await requireSession();
+  const raw = Number(formData.get("budget"));
+  const value = Number.isFinite(raw) && raw > 0 ? raw : null;
+  await db()
+    .from("org_flags")
+    .upsert({ key: "monthly_budget_usd_override", value, updated_at: new Date().toISOString() });
+  revalidatePath("/controls");
+}
+
 // ---- outbox / incidents ----
 export async function markOutboxReviewed(id: string) {
   await requireSession();

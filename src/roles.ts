@@ -47,14 +47,22 @@ export interface RoleDef {
   docs: string[];
   tools: string[];
   webSearch?: boolean;
+  // Per-role inference overrides (owner decision 2026-08-21): judgment-critical
+  // roles run gpt-5.6-terra; everyone else inherits ORG_MODEL (gpt-5.6-luna).
+  model?: string;
+  maxRunUsd?: number; // terra runs legitimately exceed the $1 default cap
   goal: string;
 }
+
+const TERRA = "gpt-5.6-terra";
 
 const REPORT_TABLES = "templates/dept-report.md";
 
 export const ROLES: Record<RoleKey, RoleDef> = {
   // ─────────────────────────── Phase A ───────────────────────────
   ceo: {
+    model: TERRA,
+    maxRunUsd: 2,
     dept: "brain",
     phase: "A",
     cadence: ["0 7 * * *"],
@@ -74,6 +82,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   auditor: {
+    model: TERRA,
+    maxRunUsd: 3,
     dept: "brain",
     phase: "A",
     cadence: ["0 18 * * 0"],
@@ -83,6 +93,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   "trivia-ops-director": {
+    model: TERRA,
+    maxRunUsd: 2,
     dept: "trivia-ops",
     phase: "A",
     cadence: ["30 7 * * *"],
@@ -92,6 +104,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   "marketing-director": {
+    model: TERRA,
+    maxRunUsd: 2,
     dept: "marketing",
     phase: "A",
     cadence: ["35 7 * * *"],
@@ -129,6 +143,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   "trivia-qa": {
+    model: TERRA,
+    maxRunUsd: 3,
     dept: "trivia-ops",
     phase: "A",
     cadence: ["0 3 * * *"],
@@ -140,6 +156,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
 
   // ─────────────────────────── Phase B ───────────────────────────
   "chief-of-staff": {
+    model: TERRA,
+    maxRunUsd: 2,
     dept: "brain",
     phase: "B",
     cadence: ["30 7 * * *", "0 13 * * *"],
@@ -158,6 +176,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   "cx-director": {
+    model: TERRA,
+    maxRunUsd: 2,
     dept: "cx",
     phase: "B",
     cadence: ["30 9 * * *"],
@@ -203,6 +223,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   "bizops-director": {
+    model: TERRA,
+    maxRunUsd: 2,
     dept: "biz-ops",
     phase: "B",
     cadence: ["0 8 * * *"],

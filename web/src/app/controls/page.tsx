@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { setBudgetOverride, setKillSwitch } from "@/lib/actions";
+import { setBudgetOverride, setKillSwitch, setMonthlyBudgetOverride } from "@/lib/actions";
 import { Section, timeAgo } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +10,7 @@ export default async function ControlsPage() {
   const killed = flag("kill_switch")?.value === true;
   const paused = (flag("paused_agents")?.value as string[] | undefined) ?? [];
   const budget = flag("daily_budget_usd_override")?.value;
+  const monthlyBudget = flag("monthly_budget_usd_override")?.value;
   const hb = flag("daemon_heartbeat")?.value as
     | { at?: string; up_since?: string; mode?: string; phase?: string; model?: string; host?: string }
     | undefined;
@@ -94,6 +95,26 @@ export default async function ControlsPage() {
           <button className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950">Save</button>
           <p className="ml-auto max-w-sm text-xs text-zinc-500">
             Policies §2: at 100% of budget the org stops and escalates. This override raises or lowers the daily cap without touching the daemon host.
+          </p>
+        </form>
+      </Section>
+
+      <Section title="Monthly inference budget override">
+        <form action={setMonthlyBudgetOverride} className="flex items-end gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <label className="flex flex-col gap-1 text-sm text-zinc-300">
+            USD per calendar month (empty = daemon default, $100)
+            <input
+              name="budget"
+              type="number"
+              step="5"
+              min="0"
+              defaultValue={typeof monthlyBudget === "number" ? monthlyBudget : ""}
+              className="w-40 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
+            />
+          </label>
+          <button className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950">Save</button>
+          <p className="ml-auto max-w-sm text-xs text-zinc-500">
+            The month-to-date ledger is checked before every run — at the cap the org halts until the calendar flips or you raise this.
           </p>
         </form>
       </Section>
