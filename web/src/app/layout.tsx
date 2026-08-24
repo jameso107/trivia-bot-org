@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 const NAV = [
   ["/", "Overview"],
   ["/agents", "Agents"],
+  ["/org", "Org chart"],
   ["/approvals", "Approvals"],
   ["/tasks", "Tasks"],
   ["/runs", "Runs"],

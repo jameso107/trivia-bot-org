@@ -25,7 +25,7 @@ export default async function AgentsPage() {
       <header>
         <h1 className="text-3xl font-bold">Agents</h1>
         <p className="text-sm text-zinc-500">
-          All 28 registry roles. Phase-gated scheduling; Run now works whenever the daemon is up.
+          All {roster.length} registry roles. Phase-gated scheduling; Run now works whenever the daemon is up.
           dev-features &amp; qa-tester execute in the Claude Code builder pod (D-007).
         </p>
       </header>
