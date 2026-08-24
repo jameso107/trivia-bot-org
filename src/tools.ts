@@ -928,7 +928,32 @@ TOOLBELT.insert_pack = writeTool({
       .insert(qs.map((q) => ({ ...q, pack_id: pack.id })));
     if (qErr) return { error: `questions failed: ${qErr.message} (pack ${pack.id} left in qa_pending, incomplete — flag it)` };
     ctx.artifacts.push(`packs:${pack.id}`);
-    return { inserted: true, pack_id: pack.id, status: "qa_pending" };
+
+    // Claim the venue request this pack fulfills (2026-08-24 gap: unclaimed
+    // requests got re-authored — two Michigan Football packs in one day).
+    // Match by topic containment either way; the row advances to 'qa' and
+    // set_pack_status finishes the story (live→delivered, rejected→requested).
+    let claimedRequest: string | null = null;
+    const hay = `${args.topic} ${args.title}`.toLowerCase();
+    const { data: openReqs } = await db()
+      .from("custom_pack_requests")
+      .select("id, topic")
+      .eq("status", "requested")
+      .limit(20);
+    const match = (openReqs ?? []).find((r) => {
+      const t = String(r.topic ?? "").toLowerCase().trim();
+      return t.length > 2 && (hay.includes(t) || t.includes(String(args.topic).toLowerCase()));
+    });
+    if (match) {
+      await db()
+        .from("custom_pack_requests")
+        .update({ status: "qa", pack_id: pack.id })
+        .eq("id", match.id)
+        .eq("status", "requested");
+      claimedRequest = match.id as string;
+      ctx.artifacts.push(`custom_pack_requests:${match.id}`);
+    }
+    return { inserted: true, pack_id: pack.id, status: "qa_pending", claimed_request: claimedRequest };
   },
 });
 
@@ -971,6 +996,21 @@ TOOLBELT.set_pack_status = writeTool({
       .eq("status", "qa_pending");
     if (error) return { error: error.message };
     ctx.artifacts.push(`packs:${args.pack_id}`);
+    // Finish the venue-request story: live delivers it; rejected re-opens it
+    // so the next creation run re-authors with a clean slate.
+    if (args.status === "live") {
+      await db()
+        .from("custom_pack_requests")
+        .update({ status: "delivered", delivered_at: new Date().toISOString() })
+        .eq("pack_id", args.pack_id)
+        .eq("status", "qa");
+    } else {
+      await db()
+        .from("custom_pack_requests")
+        .update({ status: "requested", pack_id: null })
+        .eq("pack_id", args.pack_id)
+        .eq("status", "qa");
+    }
     return { updated: true };
   },
 });

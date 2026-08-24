@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Org console: the TRIVIUM triangle in ops-emerald — same mark as the
+       product, recolored so the two tabs never get confused. -->
+  <rect width="64" height="64" rx="14" fill="#09090b"/>
+  <path d="M32 13 L53.5 47.5 H10.5 Z" fill="#34d399" stroke="#34d399" stroke-width="8" stroke-linejoin="round"/>
+  <circle cx="32" cy="37.5" r="5.5" fill="#09090b"/>
+</svg>
