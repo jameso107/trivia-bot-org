@@ -48,23 +48,24 @@ export interface RoleDef {
   docs: string[];
   tools: string[];
   webSearch?: boolean;
-  // Per-role inference overrides (owner decision 2026-08-21): judgment-critical
-  // roles run gpt-5.6-terra; everyone else inherits ORG_MODEL (gpt-5.6-luna).
+  // Per-role inference overrides (owner decision 2026-08-24, D-013):
+  // judgment-critical roles run gpt-5.6-sol; everyone else inherits the fleet
+  // default (gpt-5.6-terra).
   model?: string;
-  maxRunUsd?: number; // terra runs legitimately exceed the $1 default cap
+  maxRunUsd?: number; // sol/volume runs legitimately exceed the default cap
   maxTurns?: number; // volume roles (prospecting) need more tool turns than the default 20
   goal: string;
 }
 
-const TERRA = "gpt-5.6-terra";
+const SOL = "gpt-5.6-sol"; // judgment tier (D-013)
 
 const REPORT_TABLES = "templates/dept-report.md";
 
 export const ROLES: Record<RoleKey, RoleDef> = {
   // ─────────────────────────── Phase A ───────────────────────────
   ceo: {
-    model: TERRA,
-    maxRunUsd: 2,
+    model: SOL,
+    maxRunUsd: 5,
     dept: "brain",
     phase: "A",
     cadence: ["0 7 * * *"],
@@ -84,8 +85,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   auditor: {
-    model: TERRA,
-    maxRunUsd: 3,
+    model: SOL,
+    maxRunUsd: 8,
     dept: "brain",
     phase: "A",
     cadence: ["0 18 * * 0"],
@@ -95,8 +96,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   "trivia-ops-director": {
-    model: TERRA,
-    maxRunUsd: 2,
+    model: SOL,
+    maxRunUsd: 5,
     dept: "trivia-ops",
     phase: "A",
     cadence: ["30 7 * * *"],
@@ -106,8 +107,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   "marketing-director": {
-    model: TERRA,
-    maxRunUsd: 2,
+    model: SOL,
+    maxRunUsd: 5,
     dept: "marketing",
     phase: "A",
     cadence: ["35 7 * * *"],
@@ -121,7 +122,7 @@ export const ROLES: Record<RoleKey, RoleDef> = {
     phase: "A",
     cadence: ["0 9 * * *", "0 14 * * *"],
     maxTurns: 30,
-    maxRunUsd: 1.5,
+    maxRunUsd: 6,
     docs: ["departments/marketing/icp-venues.md", "departments/marketing/playbook.md"],
     tools: ["query_org", "insert_lead", "update_lead", "create_task", "update_task", "firecrawl_search", "firecrawl_scrape"],
     webSearch: true,
@@ -136,7 +137,7 @@ export const ROLES: Record<RoleKey, RoleDef> = {
     phase: "A",
     cadence: ["30 8-22/2 * * *"],
     maxTurns: 30,
-    maxRunUsd: 1.5,
+    maxRunUsd: 6,
     docs: ["departments/marketing/icp-venues.md"],
     tools: ["query_org", "insert_lead", "update_lead", "create_task", "update_task", "firecrawl_search", "firecrawl_scrape"],
     webSearch: true,
@@ -155,6 +156,7 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   "trivia-creation": {
     dept: "trivia-ops",
     phase: "A",
+    maxRunUsd: 5,
     cadence: ["0 2 * * *"],
     docs: ["departments/trivia-ops/question-style-guide.md", "company/brand-voice.md", "departments/trivia-ops/playbook.md"],
     tools: ["query_org", "query_product", "insert_pack", "create_task", "update_task"],
@@ -162,8 +164,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   "trivia-qa": {
-    model: TERRA,
-    maxRunUsd: 3,
+    model: SOL,
+    maxRunUsd: 8,
     dept: "trivia-ops",
     phase: "A",
     cadence: ["0 3 * * *"],
@@ -175,8 +177,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
 
   // ─────────────────────────── Phase B ───────────────────────────
   "chief-of-staff": {
-    model: TERRA,
-    maxRunUsd: 2,
+    model: SOL,
+    maxRunUsd: 4,
     dept: "brain",
     phase: "B",
     cadence: ["30 7 * * *", "0 13 * * *"],
@@ -195,8 +197,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   "cx-director": {
-    model: TERRA,
-    maxRunUsd: 2,
+    model: SOL,
+    maxRunUsd: 5,
     dept: "cx",
     phase: "B",
     cadence: ["30 9 * * *"],
@@ -242,8 +244,8 @@ export const ROLES: Record<RoleKey, RoleDef> = {
   },
 
   "bizops-director": {
-    model: TERRA,
-    maxRunUsd: 2,
+    model: SOL,
+    maxRunUsd: 5,
     dept: "biz-ops",
     phase: "B",
     cadence: ["0 8 * * *"],

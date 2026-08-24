@@ -11,21 +11,26 @@ export const config = {
   supabaseUrl: required("SUPABASE_URL"),
   supabaseSecretKey: required("SUPABASE_SECRET_KEY"),
   mode: (process.env.ORG_MODE === "live" ? "live" : "dry") as "dry" | "live",
-  // Fleet default (owner decision 2026-08-21): gpt-5.6-luna — newer AND
-  // cheaper than gpt-5-mini. Judgment-critical roles override to terra in
-  // roles.ts. ORG_MODEL still beats this for the fleet.
-  model: process.env.ORG_MODEL ?? "gpt-5.6-luna",
+  // Fleet default (owner decision 2026-08-24, D-013): gpt-5.6-terra for the
+  // whole fleet; judgment-critical roles override to SOL in roles.ts.
+  // ORG_MODEL still beats this for the fleet.
+  model: process.env.ORG_MODEL ?? "gpt-5.6-terra",
   dailyBudgetUsd: Number(process.env.DAILY_BUDGET_USD ?? 5),
   monthlyBudgetUsd: Number(process.env.MONTHLY_BUDGET_USD ?? 100),
-  maxRunUsd: Number(process.env.MAX_RUN_USD ?? 1),
+  // Per-run ceiling for roles without an explicit maxRunUsd — sized for the
+  // terra fleet default (D-013); the org_flags budget overrides are the real
+  // circuit breaker.
+  maxRunUsd: Number(process.env.MAX_RUN_USD ?? 2),
   brainPath: process.env.BRAIN_PATH ?? "../trivia-bot-brain",
   ownerEmail: process.env.OWNER_EMAIL ?? "james@syzygy.services",
   // Which phases the SCHEDULER activates (blueprint: grow into the org chart).
   // A = boot roster · B = hardening roster · C = scale roster.
-  // `once <role>` can always run any defined role regardless of phase.
-  phase: (["A", "B", "C"].includes(process.env.ORG_PHASE ?? "A")
-    ? (process.env.ORG_PHASE ?? "A")
-    : "A") as "A" | "B" | "C",
+  // Default B since 2026-08-24 (D-013: owner unbenched the hardening roster;
+  // venue-outreach stays held via org_flags.paused_agents until the outreach
+  // domain + canary exist). `once <role>` can always run any defined role.
+  phase: (["A", "B", "C"].includes(process.env.ORG_PHASE ?? "B")
+    ? (process.env.ORG_PHASE ?? "B")
+    : "B") as "A" | "B" | "C",
   // Outreach stays triple-locked (policies §3): live mode AND this flag AND an
   // approved canary row. Until all three, sends are outbox records.
   outreachEnabled: process.env.OUTREACH_ENABLED === "true",

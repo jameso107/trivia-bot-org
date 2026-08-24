@@ -4,6 +4,9 @@
 // early rather than late.
 const PRICES: Record<string, { in: number; out: number }> = {
   // 5.6 family rates as of the 2026-07-30 price cut (openai.com pricing).
+  // Sol: 2026-08-22 promo rate ($4/$20, through at least 2026-11-21; standard
+  // was ~$5/$30) — finance should re-check when the promo lapses.
+  "gpt-5.6-sol": { in: 4, out: 20 },
   "gpt-5.6-terra": { in: 2, out: 12 },
   "gpt-5.6-luna": { in: 0.2, out: 1.2 },
   "gpt-5": { in: 1.25, out: 10 },
