@@ -376,7 +376,7 @@ export const TOOLBELT: Record<string, OrgTool> = {
   send_email: writeTool({
     name: "send_email",
     description:
-      "Send an email (the CEO's daily brief, CX drafts). Phase A policy is enforced in code: only owner-addressed mail transmits; any other recipient lands in the outbox for the owner to review — write those drafts send-ready.",
+      "Send an email (the CEO's daily brief, CX drafts). WRITE FOR A HUMAN: plain prose and short '-' bullets (rendered to HTML), real names not UUIDs, no markdown tables, no REPORT formatting; ids only in a final 'refs:' line. Phase A policy is enforced in code: only owner-addressed mail transmits; any other recipient lands in the outbox for the owner to review — write those drafts send-ready.",
     parameters: {
       type: "object",
       properties: {

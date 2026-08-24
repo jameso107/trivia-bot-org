@@ -32,8 +32,40 @@ async function api(
 
 const inboxPath = () => `/inboxes/${encodeURIComponent(config.agentmailInbox)}`;
 
+// Markdown-lite → email HTML. Agents write markdown-ish text; inboxes get a
+// clean HTML rendering (headings, bold, bullets, paragraphs) plus the raw
+// text as the fallback part. No dependency — email HTML wants to be boring.
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+export function toEmailHtml(text: string): string {
+  const inline = (s: string) =>
+    esc(s)
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  const blocks = text.split(/\n{2,}/).map((block) => {
+    const lines = block.split("\n");
+    if (lines.every((l) => /^\s*[-•]\s+/.test(l))) {
+      const items = lines.map((l) => `<li>${inline(l.replace(/^\s*[-•]\s+/, ""))}</li>`).join("");
+      return `<ul style="margin:0 0 14px;padding-left:22px">${items}</ul>`;
+    }
+    if (/^#{1,3}\s+/.test(lines[0])) {
+      const h = inline(lines[0].replace(/^#{1,3}\s+/, ""));
+      const rest = lines.slice(1).join("<br>");
+      return `<h3 style="margin:18px 0 6px;font-size:16px">${h}</h3>${rest ? `<p style="margin:0 0 14px">${inline(rest)}</p>` : ""}`;
+    }
+    return `<p style="margin:0 0 14px">${lines.map(inline).join("<br>")}</p>`;
+  });
+  return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.55;color:#18181b;max-width:640px">${blocks.join("")}</div>`;
+}
+
 export async function sendMail(to: string, subject: string, textBody: string) {
-  return api("POST", `${inboxPath()}/messages/send`, { to: [to], subject, text: textBody });
+  return api("POST", `${inboxPath()}/messages/send`, {
+    to: [to],
+    subject,
+    text: textBody,
+    html: toEmailHtml(textBody),
+  });
 }
 
 export async function readMessage(messageId: string) {
