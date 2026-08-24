@@ -20,3 +20,29 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Tactile buttons (owner request 2026-08-24): every button visibly presses,
+ * shows keyboard focus, and reads busy while disabled. Lives in @layer base
+ * so per-button Tailwind utilities still win where they specialize. */
+@layer base {
+  button {
+    transition:
+      transform 100ms ease,
+      opacity 120ms ease,
+      background-color 120ms ease,
+      border-color 120ms ease;
+  }
+  button:active:not(:disabled) {
+    transform: scale(0.95);
+  }
+  button:disabled {
+    opacity: 0.55;
+    cursor: wait;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid #fbbf24;
+    outline-offset: 2px;
+  }
+}

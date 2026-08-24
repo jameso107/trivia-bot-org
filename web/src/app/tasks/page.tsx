@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { ROLES } from "@/lib/roles";
 import { createTask, setTaskStatus } from "@/lib/actions";
 import { Badge, Section, Table, timeAgo } from "@/components/ui";
+import { ActionButton } from "@/components/action-button";
 
 export const dynamic = "force-dynamic";
 
@@ -56,9 +57,9 @@ export default async function TasksPage() {
             ))}
           </select>
           <input name="due" type="date" className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" />
-          <button className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950 lg:col-span-2">
+          <ActionButton pendingText="Filing…" className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950 lg:col-span-2">
             File directive
-          </button>
+          </ActionButton>
         </form>
       </Section>
 
@@ -88,10 +89,10 @@ export default async function TasksPage() {
                 <td className="px-3 py-2">
                   <div className="flex gap-1">
                     <form action={setTaskStatus.bind(null, t.id as string, "done")}>
-                      <button className="rounded border border-zinc-700 px-2 py-0.5 text-xs hover:border-emerald-500">done</button>
+                      <ActionButton pendingText="…" className="rounded border border-zinc-700 px-2 py-0.5 text-xs hover:border-emerald-500">done</ActionButton>
                     </form>
                     <form action={setTaskStatus.bind(null, t.id as string, "archived")}>
-                      <button className="rounded border border-zinc-800 px-2 py-0.5 text-xs text-zinc-500 hover:border-zinc-600">archive</button>
+                      <ActionButton pendingText="…" className="rounded border border-zinc-800 px-2 py-0.5 text-xs text-zinc-500 hover:border-zinc-600">archive</ActionButton>
                     </form>
                   </div>
                 </td>

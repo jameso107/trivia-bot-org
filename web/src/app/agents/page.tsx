@@ -3,20 +3,26 @@ import { db } from "@/lib/db";
 import { ROLES, type RoleKey } from "@/lib/roles";
 import { requestRun, setAgentPaused } from "@/lib/actions";
 import { Badge, Section, Table, timeAgo, usd } from "@/components/ui";
+import { ActionButton } from "@/components/action-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function AgentsPage() {
   const d = db();
-  const [runs, flags] = await Promise.all([
+  const [runs, flags, reqs] = await Promise.all([
     d.from("runs").select("agent, status, started_at, spend_usd").order("started_at", { ascending: false }).limit(200),
     d.from("org_flags").select("value").eq("key", "paused_agents").single(),
+    d.from("agent_run_requests").select("agent, status").in("status", ["pending", "started"]),
   ]);
   const paused = new Set<string>(Array.isArray(flags.data?.value) ? (flags.data!.value as string[]) : []);
   const lastRun = new Map<string, { status: string; started_at: string; spend_usd: number }>();
   for (const r of runs.data ?? []) {
     if (!lastRun.has(r.agent as string)) lastRun.set(r.agent as string, r as never);
   }
+  // Queue state per agent: requestRun refuses duplicates, and this chip is
+  // the visible receipt that a click actually landed.
+  const queued = new Map<string, string>();
+  for (const q of reqs.data ?? []) queued.set(q.agent as string, q.status as string);
 
   const roster = Object.entries(ROLES) as [RoleKey, (typeof ROLES)[RoleKey]][];
 
@@ -61,16 +67,24 @@ export default async function AgentsPage() {
                 <td className="px-3 py-2 text-zinc-400">{last ? usd(last.spend_usd) : "—"}</td>
                 <td className="px-3 py-2">
                   <form action={requestRun.bind(null, key)}>
-                    <button className="rounded-lg border border-zinc-700 px-2 py-1 text-xs hover:border-amber-400">
+                    <ActionButton
+                      pendingText="Queuing…"
+                      className="rounded-lg border border-zinc-700 px-2 py-1 text-xs hover:border-amber-400"
+                    >
                       Run now
-                    </button>
+                    </ActionButton>
                   </form>
+                  {queued.has(key) && (
+                    <span className={`mt-1 block text-[10px] font-semibold ${queued.get(key) === "started" ? "text-sky-300" : "text-amber-300"}`}>
+                      {queued.get(key) === "started" ? "running…" : "✓ queued"}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <form action={setAgentPaused.bind(null, key, !isPaused)}>
-                    <button className="rounded-lg border border-zinc-800 px-2 py-1 text-xs text-zinc-400 hover:border-red-500">
+                    <ActionButton className="rounded-lg border border-zinc-800 px-2 py-1 text-xs text-zinc-400 hover:border-red-500">
                       {isPaused ? "Resume" : "Pause"}
-                    </button>
+                    </ActionButton>
                   </form>
                 </td>
               </tr>

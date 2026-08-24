@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { markOutboxReviewed } from "@/lib/actions";
 import { Section, timeAgo } from "@/components/ui";
+import { ActionButton } from "@/components/action-button";
 
 export const dynamic = "force-dynamic";
 
@@ -70,9 +71,9 @@ export default async function OutboxPage() {
                 </div>
                 {!r.reviewed && (
                   <form action={markOutboxReviewed.bind(null, r.id as string)} className="mt-2">
-                    <button className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:border-emerald-500">
+                    <ActionButton pendingText="Marking…" className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:border-emerald-500">
                       Mark reviewed
-                    </button>
+                    </ActionButton>
                   </form>
                 )}
               </details>

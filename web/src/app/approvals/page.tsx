@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { decideApproval } from "@/lib/actions";
 import { Badge, Section, timeAgo } from "@/components/ui";
+import { ActionButton } from "@/components/action-button";
 
 export const dynamic = "force-dynamic";
 
@@ -43,15 +44,15 @@ export default async function ApprovalsPage() {
                     placeholder="note (optional)"
                     className="rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm"
                   />
-                  <button className="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-bold text-zinc-950">
+                  <ActionButton pendingText="Approving…" className="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-bold text-zinc-950">
                     Approve
-                  </button>
+                  </ActionButton>
                 </form>
                 <form action={decideApproval.bind(null, a.id as string, "rejected")}>
                   <input type="hidden" name="note" value="" />
-                  <button className="rounded-lg border border-red-800 px-3 py-1.5 text-sm text-red-400 hover:bg-red-950">
+                  <ActionButton pendingText="Rejecting…" className="rounded-lg border border-red-800 px-3 py-1.5 text-sm text-red-400 hover:bg-red-950">
                     Reject
-                  </button>
+                  </ActionButton>
                 </form>
               </div>
             </div>

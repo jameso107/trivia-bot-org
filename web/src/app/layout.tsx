@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { NavLink } from "@/components/ui";
+import { ActionButton } from "@/components/action-button";
 import { db } from "@/lib/db";
 import { logout } from "@/lib/actions";
 import { headers } from "next/headers";
@@ -51,9 +52,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <NavLink key={href} href={href} label={label} />
           ))}
           <form action={logout} className="mt-auto">
-            <button className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-zinc-500 hover:bg-zinc-900">
+            <ActionButton pendingText="Signing out…" className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-zinc-500 hover:bg-zinc-900">
               Sign out
-            </button>
+            </ActionButton>
           </form>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">

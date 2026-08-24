@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { ROLES, type RoleKey } from "@/lib/roles";
 import { requestRun, setAgentPaused } from "@/lib/actions";
 import { Badge, Section, Table, timeAgo, usd } from "@/components/ui";
+import { ActionButton } from "@/components/action-button";
 
 export const dynamic = "force-dynamic";
 
@@ -33,14 +34,14 @@ export default async function AgentDetail({ params }: PageProps<"/agents/[key]">
         </div>
         <div className="flex gap-2">
           <form action={requestRun.bind(null, key)}>
-            <button className="rounded-lg bg-amber-400 px-3 py-1.5 text-sm font-bold text-zinc-950">
+            <ActionButton pendingText="Queuing…" className="rounded-lg bg-amber-400 px-3 py-1.5 text-sm font-bold text-zinc-950">
               Run now
-            </button>
+            </ActionButton>
           </form>
           <form action={setAgentPaused.bind(null, key, !isPaused)}>
-            <button className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:border-red-500">
+            <ActionButton className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:border-red-500">
               {isPaused ? "Resume" : "Pause"}
-            </button>
+            </ActionButton>
           </form>
         </div>
       </header>

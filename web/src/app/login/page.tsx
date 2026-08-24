@@ -1,4 +1,5 @@
 import { login } from "@/lib/actions";
+import { ActionButton } from "@/components/action-button";
 
 export const metadata = { title: "Sign in — Org Console" };
 
@@ -28,9 +29,9 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             Wrong passcode.
           </p>
         )}
-        <button className="rounded-xl bg-amber-400 px-4 py-2.5 font-bold text-zinc-950 hover:bg-amber-300">
+        <ActionButton pendingText="Checking…" className="rounded-xl bg-amber-400 px-4 py-2.5 font-bold text-zinc-950 hover:bg-amber-300">
           Enter
-        </button>
+        </ActionButton>
       </form>
     </div>
   );

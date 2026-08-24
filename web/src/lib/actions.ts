@@ -76,7 +76,18 @@ export async function setTaskStatus(id: string, status: string) {
 export async function requestRun(agent: string) {
   await requireSession();
   if (!(agent in ROLES)) throw new Error("unknown agent");
-  await db().from("agent_run_requests").insert({ agent, requested_by: "owner" });
+  // Misclick armor (owner incident 2026-08-24: an invisible click queued
+  // duplicate runs): one queued request per agent at a time — clicks while
+  // one is already pending/started are no-ops.
+  const { data: existing } = await db()
+    .from("agent_run_requests")
+    .select("id")
+    .eq("agent", agent)
+    .in("status", ["pending", "started"])
+    .limit(1);
+  if (!existing || existing.length === 0) {
+    await db().from("agent_run_requests").insert({ agent, requested_by: "owner" });
+  }
   revalidatePath("/agents");
   revalidatePath(`/agents/${agent}`);
 }

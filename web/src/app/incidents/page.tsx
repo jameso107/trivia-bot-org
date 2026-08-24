@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { resolveIncident } from "@/lib/actions";
 import { Badge, Section, timeAgo } from "@/components/ui";
+import { ActionButton } from "@/components/action-button";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +37,9 @@ export default async function IncidentsPage() {
               {i.body && <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-400">{i.body}</p>}
               {i.status === "open" && (
                 <form action={resolveIncident.bind(null, i.id as string)} className="mt-2">
-                  <button className="rounded-lg border border-zinc-700 px-3 py-1 text-xs hover:border-emerald-500">
+                  <ActionButton pendingText="Resolving…" className="rounded-lg border border-zinc-700 px-3 py-1 text-xs hover:border-emerald-500">
                     Mark resolved
-                  </button>
+                  </ActionButton>
                 </form>
               )}
             </div>

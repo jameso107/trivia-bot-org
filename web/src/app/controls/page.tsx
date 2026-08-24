@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { setBudgetOverride, setKillSwitch, setMonthlyBudgetOverride } from "@/lib/actions";
 import { Section, timeAgo } from "@/components/ui";
+import { ActionButton } from "@/components/action-button";
 
 export const dynamic = "force-dynamic";
 
@@ -60,11 +61,12 @@ export default async function ControlsPage() {
             )}
           </div>
           <form action={setKillSwitch.bind(null, !killed)}>
-            <button
+            <ActionButton
+              pendingText={killed ? "Resuming…" : "Stopping…"}
               className={`rounded-xl px-5 py-2.5 font-bold ${killed ? "bg-emerald-500 text-zinc-950" : "border border-red-800 text-red-400 hover:bg-red-950"}`}
             >
               {killed ? "Resume the org" : "KILL"}
-            </button>
+            </ActionButton>
           </form>
         </div>
       </Section>
@@ -92,7 +94,7 @@ export default async function ControlsPage() {
               className="w-40 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
             />
           </label>
-          <button className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950">Save</button>
+          <ActionButton pendingText="Saving…" className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950">Save</ActionButton>
           <p className="ml-auto max-w-sm text-xs text-zinc-500">
             Policies §2: at 100% of budget the org stops and escalates. This override raises or lowers the daily cap without touching the daemon host.
           </p>
@@ -112,7 +114,7 @@ export default async function ControlsPage() {
               className="w-40 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
             />
           </label>
-          <button className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950">Save</button>
+          <ActionButton pendingText="Saving…" className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950">Save</ActionButton>
           <p className="ml-auto max-w-sm text-xs text-zinc-500">
             The month-to-date ledger is checked before every run — at the cap the org halts until the calendar flips or you raise this.
           </p>
