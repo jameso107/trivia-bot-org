@@ -72,6 +72,7 @@ function queryTool(name: string, tables: string[], description: string): OrgTool
 async function firecrawl(
   path: string,
   body: Record<string, unknown>,
+  attempt = 0,
 ): Promise<Record<string, unknown> & { error?: string }> {
   if (!config.firecrawlKey) return { error: "FIRECRAWL_API_KEY is not set on this host" };
   try {
@@ -80,8 +81,21 @@ async function firecrawl(
       headers: { authorization: `Bearer ${config.firecrawlKey}`, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
+    // Volume prospecting slams the plan's RPM ceiling; one polite retry
+    // recovers most 429s without the agent burning a turn on the error.
+    if (res.status === 429 && attempt === 0) {
+      const retryAfter = Number(res.headers.get("retry-after")) || 20;
+      await new Promise((r) => setTimeout(r, Math.min(Math.max(retryAfter, 5), 30) * 1000));
+      return firecrawl(path, body, 1);
+    }
     const json = (await res.json()) as Record<string, unknown>;
     if (!res.ok || json.success === false) {
+      if (res.status === 429) {
+        return {
+          error:
+            "firecrawl is rate-limited (429) even after a backoff retry — spend a turn on other work (web_search, insert_lead what you have) before scraping again",
+        };
+      }
       return { error: `firecrawl ${path} failed (${res.status}): ${JSON.stringify(json.error ?? json).slice(0, 300)}` };
     }
     return json;
