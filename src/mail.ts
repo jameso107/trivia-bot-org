@@ -44,17 +44,38 @@ export function toEmailHtml(text: string): string {
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/\*([^*]+)\*/g, "<em>$1</em>");
   const blocks = text.split(/\n{2,}/).map((block) => {
-    const lines = block.split("\n");
-    if (lines.every((l) => /^\s*[-•]\s+/.test(l))) {
-      const items = lines.map((l) => `<li>${inline(l.replace(/^\s*[-•]\s+/, ""))}</li>`).join("");
-      return `<ul style="margin:0 0 14px;padding-left:22px">${items}</ul>`;
+    // A block may mix prose lines and bullet lines — group them as we go.
+    const out: string[] = [];
+    let bullets: string[] = [];
+    let prose: string[] = [];
+    const flushBullets = () => {
+      if (bullets.length) {
+        out.push(`<ul style="margin:0 0 14px;padding-left:22px">${bullets.join("")}</ul>`);
+        bullets = [];
+      }
+    };
+    const flushProse = () => {
+      if (prose.length) {
+        out.push(`<p style="margin:0 0 14px">${prose.join("<br>")}</p>`);
+        prose = [];
+      }
+    };
+    for (const line of block.split("\n")) {
+      if (/^\s*[-•]\s+/.test(line)) {
+        flushProse();
+        bullets.push(`<li>${inline(line.replace(/^\s*[-•]\s+/, ""))}</li>`);
+      } else if (/^#{1,3}\s+/.test(line)) {
+        flushProse();
+        flushBullets();
+        out.push(`<h3 style="margin:18px 0 6px;font-size:16px">${inline(line.replace(/^#{1,3}\s+/, ""))}</h3>`);
+      } else {
+        flushBullets();
+        prose.push(inline(line));
+      }
     }
-    if (/^#{1,3}\s+/.test(lines[0])) {
-      const h = inline(lines[0].replace(/^#{1,3}\s+/, ""));
-      const rest = lines.slice(1).join("<br>");
-      return `<h3 style="margin:18px 0 6px;font-size:16px">${h}</h3>${rest ? `<p style="margin:0 0 14px">${inline(rest)}</p>` : ""}`;
-    }
-    return `<p style="margin:0 0 14px">${lines.map(inline).join("<br>")}</p>`;
+    flushProse();
+    flushBullets();
+    return out.join("");
   });
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.55;color:#18181b;max-width:640px">${blocks.join("")}</div>`;
 }
