@@ -61,7 +61,7 @@ export default async function OrgPage() {
 
   const runs = (runsQ.data ?? []) as RunRow[];
   const paused = new Set<string>(Array.isArray(pausedQ.data?.value) ? (pausedQ.data!.value as string[]) : []);
-  const hb = (hbQ.data?.value ?? null) as { at?: string; mode?: string; phase?: string; host?: string } | null;
+  const hb = (hbQ.data?.value ?? null) as { at?: string; mode?: string; phase?: string; host?: string; model?: string } | null;
   const daemonUp = !!hb?.at && Date.now() - Date.parse(hb.at) < 150_000;
   const orgPhase = (hb?.phase === "B" || hb?.phase === "C" ? hb.phase : "A") as "A" | "B" | "C";
   const spendToday = (ledgerQ.data ?? []).reduce((a, r) => a + Math.abs(Number(r.amount_usd)), 0);
@@ -73,13 +73,19 @@ export default async function OrgPage() {
     if (r.started_at >= todayStart) runsToday.set(r.agent, (runsToday.get(r.agent) ?? 0) + 1);
   }
 
+  // A role without an explicit model inherits the daemon's fleet default —
+  // read it live from the heartbeat so the chart never lies about tiers.
+  const fleetModel = hb?.model ?? "gpt-5.6-terra";
+  const tierOf = (m: string): "sol" | "terra" | "luna" =>
+    m.includes("sol") ? "sol" : m.includes("terra") ? "terra" : "luna";
+
   const node = (key: string): ChartNode => {
     const role = ROLES[key as RoleKey];
     const last = lastRun.get(key);
     return {
       key,
       blurb: BLURBS[key] ?? "",
-      model: role.model?.includes("terra") ? "terra" : "luna",
+      model: tierOf(role.model ?? fleetModel),
       phase: role.phase,
       stat: {
         status: last?.status ?? null,

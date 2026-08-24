@@ -15,7 +15,7 @@ export interface NodeStat {
 export interface ChartNode {
   key: string;
   blurb: string;
-  model: "terra" | "luna";
+  model: "sol" | "terra" | "luna";
   phase: "A" | "B" | "C";
   pod?: boolean; // executes in the owner's Claude Code builder pod (D-007)
   stat: NodeStat | null; // pod nodes carry no run stats
@@ -58,21 +58,23 @@ function statLine(n: ChartNode): string {
   if (n.pod) return "runs in the builder pod (D-007)";
   const s = n.stat;
   if (!s || !s.status) return "never run";
-  const today = s.runsToday > 0 ? ` · ${s.runsToday} today` : "";
+  const today = s.runsToday > 0 ? ` · ×${s.runsToday}` : "";
   if (s.running) return `running now${today}`;
   const spend = s.spendUsd !== null ? ` · ${money(s.spendUsd)}` : "";
   return `${s.status} ${ago(s.when)}${spend}${today}`;
 }
 
-function Chip({ text, tone }: { text: string; tone: "amber" | "violet" | "red" | "zinc" }) {
+function Chip({ text, tone }: { text: string; tone: "amber" | "sky" | "violet" | "red" | "zinc" }) {
   const cls =
     tone === "amber"
       ? "border-amber-800 text-amber-300"
-      : tone === "violet"
-        ? "border-violet-800 text-violet-300"
-        : tone === "red"
-          ? "border-red-900 text-red-400"
-          : "border-zinc-700 text-zinc-500";
+      : tone === "sky"
+        ? "border-sky-800 text-sky-300"
+        : tone === "violet"
+          ? "border-violet-800 text-violet-300"
+          : tone === "red"
+            ? "border-red-900 text-red-400"
+            : "border-zinc-700 text-zinc-500";
   return (
     <span className={`inline-block rounded-full border px-1.5 py-px text-[10px] font-semibold leading-4 ${cls}`}>
       {text}
@@ -96,7 +98,10 @@ function NodeCard({ n, emphasis = false }: { n: ChartNode; emphasis?: boolean })
         <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass(n)}`} />
         <span className="break-words font-mono text-[13px] font-semibold leading-tight text-zinc-100">{n.key}</span>
         <span className="ml-auto shrink-0">
-          <Chip text={n.pod ? "pod" : n.model} tone={n.pod ? "violet" : n.model === "terra" ? "amber" : "zinc"} />
+          <Chip
+            text={n.pod ? "pod" : n.model}
+            tone={n.pod ? "violet" : n.model === "sol" ? "amber" : n.model === "terra" ? "sky" : "zinc"}
+          />
         </span>
       </div>
       <p className="mt-0.5 truncate text-[11px] leading-4 text-zinc-500">{n.blurb}</p>
@@ -161,8 +166,11 @@ export function OrgChart({ data }: { data: ChartData }) {
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-400" /> capped/killed</span>
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-500" /> failed</span>
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-zinc-600" /> never run</span>
-          <Chip text="terra" tone="amber" /> <span className="-ml-2">judgment model</span>
+          <Chip text="sol" tone="amber" /> <span className="-ml-2">judgment tier</span>
+          <Chip text="terra" tone="sky" /> <span className="-ml-2">fleet default</span>
+          <Chip text="luna" tone="zinc" /> <span className="-ml-2">volume tier</span>
           <Chip text="pod" tone="violet" /> <span className="-ml-2">builder pod (D-007)</span>
+          <span>×N = runs today</span>
           <span>dashed = future hire (benched until its phase)</span>
         </div>
       </div>

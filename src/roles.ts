@@ -58,6 +58,7 @@ export interface RoleDef {
 }
 
 const SOL = "gpt-5.6-sol"; // judgment tier (D-013)
+const LUNA = "gpt-5.6-luna"; // volume tier — owner kept prospecting on luna (D-013 amendment)
 
 const REPORT_TABLES = "templates/dept-report.md";
 
@@ -137,7 +138,10 @@ export const ROLES: Record<RoleKey, RoleDef> = {
     phase: "A",
     cadence: ["30 8-22/2 * * *"],
     maxTurns: 30,
-    maxRunUsd: 6,
+    // Owner call 2026-08-24: volume grinding is mechanical — luna does 7
+    // leads for $0.05; terra adds cost, not quality. Stays luna.
+    model: LUNA,
+    maxRunUsd: 1.5,
     docs: ["departments/marketing/icp-venues.md"],
     tools: ["query_org", "insert_lead", "update_lead", "create_task", "update_task", "firecrawl_search", "firecrawl_scrape"],
     webSearch: true,
