@@ -16,6 +16,7 @@ export type RoleKey =
   | "trivia-ops-director"
   | "marketing-director"
   | "venue-search"
+  | "lead-prospector"
   | "venue-success"
   | "trivia-creation"
   | "trivia-qa"
@@ -51,6 +52,7 @@ export interface RoleDef {
   // roles run gpt-5.6-terra; everyone else inherits ORG_MODEL (gpt-5.6-luna).
   model?: string;
   maxRunUsd?: number; // terra runs legitimately exceed the $1 default cap
+  maxTurns?: number; // volume roles (prospecting) need more tool turns than the default 20
   goal: string;
 }
 
@@ -111,17 +113,34 @@ export const ROLES: Record<RoleKey, RoleDef> = {
     cadence: ["35 7 * * *"],
     docs: ["departments/marketing/playbook.md", "departments/marketing/icp-venues.md", REPORT_TABLES],
     tools: ["query_org", "create_task", "update_task", "file_approval", "file_incident"],
-    goal: `Read your directives (tasks dept=marketing) and the funnel state (leads by status, venues). Dispatch venue-search with specific, evidence-first tasks (metros, venue types, quantity targets per the ICP). OUTREACH IS GATED: sends require the owner-approved canary plus code-level locks (policies §3) — if a directive asks for outreach before those exist, file_approval instead of acting. When Phase B agents are active, dispatch venue-outreach and social-media with equally specific tasks. End with your dept report.`,
+    goal: `Read your directives (tasks dept=marketing) and the funnel state (leads by status, venues). Dispatch venue-search with specific, evidence-first tasks (metros, venue types, quantity targets per the ICP). SHARD QUEUE (owner mandate 2026-08-24): lead-prospector grinds "Prospect shard" tasks (agent=lead-prospector) — if fewer than 8 sit open, create more, one per area×category NOT already covered (check open AND done shard tasks plus lead metros first; never re-cover ground). Walk outward through Metro Detroit — Wayne/Oakland/Macomb first, then Washtenaw, Livingston, Monroe, St. Clair. A metro beyond those = file_approval, not a task. OUTREACH IS GATED: sends require the owner-approved canary plus code-level locks (policies §3) — if a directive asks for outreach before those exist, file_approval instead of acting. When Phase B agents are active, dispatch venue-outreach and social-media with equally specific tasks. End with your dept report.`,
   },
 
   "venue-search": {
     dept: "marketing",
     phase: "A",
-    cadence: ["0 9 * * *"],
+    cadence: ["0 9 * * *", "0 14 * * *"],
+    maxTurns: 30,
+    maxRunUsd: 1.5,
     docs: ["departments/marketing/icp-venues.md", "departments/marketing/playbook.md"],
     tools: ["query_org", "insert_lead", "update_lead", "create_task", "update_task", "firecrawl_search", "firecrawl_scrape"],
     webSearch: true,
-    goal: `Research-only lead building per your role card and the ICP: use web search to find Metro Detroit venues that fit, verify each with REAL source URLs (never fabricate evidence — policies §3; firecrawl_scrape the actual page before citing it), extract decision-maker contact only where public, score per the rubric, and insert_lead each one. Claim your open task rows and update them with counts. Target this run: 3-5 QUALITY leads (Phase-A budget beats volume). NO outreach of any kind.`,
+    goal: `Lead building at VOLUME (owner mandate 2026-08-24: hundreds of qualified opportunities in the funnel, not a handful). A lead COUNTS only with 1+ contact email — insert_lead enforces it. Your run, in order: (1) claim your open task rows (query_org tasks agent=venue-search). (2) ENRICHMENT SWEEP: query_org leads with is_null=contact_email — for each, firecrawl_scrape their site's homepage/contact page (emails_found does the hunting) and update_lead with the email; a venue with no findable email after an honest hunt gets status=archived. (3) PROSPECT: web-search Metro Detroit venues fitting the ICP, verify with REAL source URLs (never fabricate evidence — policies §3), score per the rubric, insert_lead each. TARGET: 15+ NEW qualified leads this run. BATCH HARD: several searches per turn, 4-6 scrapes per turn in parallel, inserts in batches — turns are your scarcest resource, not ideas. A duplicate response from insert_lead means move on instantly. NO outreach of any kind.`,
+  },
+
+  // The volume arm of the funnel (owner mandate 2026-08-24): grinds
+  // area×category shard tasks so coverage is systematic, not vibes. Stateless
+  // coverage lives in the task queue — claim a shard, exhaust it, close it.
+  "lead-prospector": {
+    dept: "marketing",
+    phase: "A",
+    cadence: ["30 8-22/2 * * *"],
+    maxTurns: 30,
+    maxRunUsd: 1.5,
+    docs: ["departments/marketing/icp-venues.md"],
+    tools: ["query_org", "insert_lead", "update_lead", "create_task", "update_task", "firecrawl_search", "firecrawl_scrape"],
+    webSearch: true,
+    goal: `Volume prospecting (owner mandate 2026-08-24: hundreds of email-qualified venues in the funnel). (1) query_org tasks where agent=lead-prospector, status=open, order_by priority — take the first and update_task it to claimed IMMEDIATELY (parallel runs must not collide). That task is your shard: one geographic area × venue categories. No open shard task = report "shard queue empty" and stop cheaply (marketing-director restocks). (2) GRIND THE SHARD: firecrawl_search + web-search the area's venues by category ("best bars <area>", "<area> breweries", local guides, "<area> sports bar"); firecrawl_scrape venue sites — emails_found is your qualification email; score honestly per the ICP (thin evidence = lower score, still insert if emailed and plausibly fits; hard exclusions stay excluded). insert_lead EVERY qualified venue. No public email after checking site + Facebook = skip it and count it. A duplicate response = already in funnel, move on instantly. (3) TARGET: 12-25 qualified leads per run. BATCH HARD: several searches per turn, 4-6 scrapes per turn in parallel, inserts in batches — spend turns on coverage, not deliberation. (4) Close out: update_task your shard to done, and put the counts (found / qualified / skipped-no-email / duplicates) in your report; if the shard clearly holds more venues than you covered, create_task a follow-up shard (agent=lead-prospector) naming exactly what is left. Research only — NO outreach of any kind.`,
   },
 
   "venue-success": {

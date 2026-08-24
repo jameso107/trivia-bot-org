@@ -90,6 +90,34 @@ async function firecrawl(
   }
 }
 
+// Lead qualification (owner mandate 2026-08-24): a lead counts ONLY with 1+
+// contact email. Validation + extraction live here so the bar is code, not
+// prompt-compliance.
+const EMAIL_RE = /^[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/i;
+const EMAIL_SCAN_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}/g;
+// Assets, tracker noise, and unmonitored senders never qualify a lead.
+const JUNK_EMAIL_RE =
+  /(example\.(com|org|net)|sentry\.|wixpress\.com|\.(png|jpe?g|gif|webp|svg|css|js)$|@[0-9]+x\.|no-?reply|donotreply|godaddy\.com|placeholder|yourdomain|youremail|email\.com$)/i;
+
+export function extractEmails(text: string): string[] {
+  const mailtos = [...text.matchAll(/mailto:([^"'\s)>?]+)/gi)].map((m) => m[1]);
+  const scanned = text.match(EMAIL_SCAN_RE) ?? [];
+  const cleaned = [...mailtos, ...scanned].map((e) =>
+    e.trim().toLowerCase().replace(/^%20/, "").replace(/[.,;:]+$/, ""),
+  );
+  return [...new Set(cleaned)].filter((e) => EMAIL_RE.test(e) && !JUNK_EMAIL_RE.test(e)).slice(0, 10);
+}
+
+function domainOf(url: string | undefined | null): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`);
+    return u.hostname.replace(/^www\./i, "").toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
 // A write tool wraps its live implementation with the dry-run guard.
 function writeTool(
   spec: Omit<OrgTool, "effect" | "run"> & {
@@ -181,7 +209,7 @@ export const TOOLBELT: Record<string, OrgTool> = {
   firecrawl_scrape: {
     name: "firecrawl_scrape",
     description:
-      "Fetch ONE URL as clean markdown (Firecrawl, main content only, truncated to 6000 chars). Use it to verify evidence pages and extract public contact info AFTER search found the URL.",
+      "Fetch ONE URL as markdown (Firecrawl, full page including footer/contact blocks, text truncated to 6000 chars). emails_found lists every real email on the FULL page — junk filtered, scanned before truncation — so one scrape of a homepage or contact page usually qualifies a lead.",
     effect: "read",
     parameters: {
       type: "object",
@@ -193,7 +221,9 @@ export const TOOLBELT: Record<string, OrgTool> = {
       const out = await firecrawl("/scrape", {
         url: String(args.url),
         formats: ["markdown"],
-        onlyMainContent: true,
+        // Full page on purpose: venue emails live in footers and contact
+        // blocks that main-content extraction strips.
+        onlyMainContent: false,
       });
       if ("error" in out) return out;
       const data = out.data as { markdown?: string; metadata?: { title?: string; sourceURL?: string } } | undefined;
@@ -201,6 +231,7 @@ export const TOOLBELT: Record<string, OrgTool> = {
       return {
         title: data?.metadata?.title ?? null,
         url: data?.metadata?.sourceURL ?? String(args.url),
+        emails_found: extractEmails(md),
         markdown: md.slice(0, 6000),
         truncated: md.length > 6000,
       };
@@ -470,7 +501,7 @@ export const TOOLBELT: Record<string, OrgTool> = {
   insert_lead: writeTool({
     name: "insert_lead",
     description:
-      "venue-search: insert an enriched venue lead. Evidence entries MUST carry real source_urls (policies §3: personalization must be true).",
+      "Insert a qualified venue lead. QUALIFICATION BAR (owner mandate, enforced here): contact_email is REQUIRED — no email, no lead; hunt the site footer, /contact, /about, or the venue's Facebook page (firecrawl_scrape returns emails_found). Evidence entries MUST carry real source_urls (policies §3). Duplicates are detected by website domain and by name — a duplicate returns the existing lead_id with nothing written; move on, never re-insert.",
     parameters: {
       type: "object",
       properties: {
@@ -480,7 +511,7 @@ export const TOOLBELT: Record<string, OrgTool> = {
         website: { type: "string" },
         contact_name: { type: "string" },
         contact_role: { type: "string" },
-        contact_email: { type: "string" },
+        contact_email: { type: "string", description: "REQUIRED: a real public mailbox for this venue" },
         evidence: {
           type: "array",
           items: {
@@ -492,19 +523,59 @@ export const TOOLBELT: Record<string, OrgTool> = {
         },
         score: { type: "number", description: "0-1 fit per the ICP rubric" },
       },
-      required: ["venue_name", "metro", "evidence", "score"],
+      required: ["venue_name", "metro", "contact_email", "evidence", "score"],
       additionalProperties: false,
     },
     note: (a) => `lead: ${a.venue_name} (${a.metro}) score ${a.score}`,
     async live(args, ctx) {
+      const email = String(args.contact_email ?? "").trim().toLowerCase();
+      if (!EMAIL_RE.test(email) || JUNK_EMAIL_RE.test(email)) {
+        return {
+          qualified: false,
+          error:
+            "rejected: contact_email is missing or not a real mailbox — a lead only counts with 1+ contact email (owner mandate). Scrape the site's contact/about/footer or the venue's Facebook page; if no public email exists, skip this venue and count it in your report.",
+        };
+      }
+      // Dedupe: domain is the venue's true identity (metro strings vary run
+      // to run); name match is the fallback for site-less venues.
+      const venueName = String(args.venue_name).trim();
+      const domain = domainOf(args.website ? String(args.website) : null);
+      type DupeRow = { id: string; venue_name: string; status: string };
+      let dupe: DupeRow | undefined;
+      if (domain) {
+        const { data } = await db()
+          .from("leads")
+          .select("id, venue_name, status")
+          .neq("status", "archived")
+          .ilike("website", `%${domain}%`)
+          .limit(1);
+        dupe = data?.[0] as DupeRow | undefined;
+      }
+      if (!dupe) {
+        const escaped = venueName.replace(/([%_\\])/g, "\\$1");
+        const { data } = await db()
+          .from("leads")
+          .select("id, venue_name, status")
+          .neq("status", "archived")
+          .ilike("venue_name", escaped)
+          .limit(1);
+        dupe = data?.[0] as DupeRow | undefined;
+      }
+      if (dupe) {
+        return {
+          duplicate: true,
+          lead_id: dupe.id,
+          note: `"${dupe.venue_name}" is already in the funnel (${dupe.status}) — nothing written; move to the next venue`,
+        };
+      }
       const { data, error } = await db()
         .from("leads")
-        .insert({ ...args, status: "enriched" })
+        .insert({ ...args, venue_name: venueName, contact_email: email, status: "enriched" })
         .select("id")
         .single();
       if (error) return { error: error.message };
       ctx.artifacts.push(`leads:${data.id}`);
-      return { lead_id: data.id };
+      return { lead_id: data.id, qualified: true };
     },
   }),
 };
@@ -513,7 +584,8 @@ export const TOOLBELT: Record<string, OrgTool> = {
 
 TOOLBELT.update_lead = writeTool({
   name: "update_lead",
-  description: "Update a lead's status/score/evidence (funnel states per the org schema). Suppression is permanent — never un-suppress.",
+  description:
+    "Update a lead: funnel status, score, or enrichment (contact email/name/role, website) — the tool for filling in emails on old leads. Suppression is permanent — never un-suppress.",
   parameters: {
     type: "object",
     properties: {
@@ -523,12 +595,16 @@ TOOLBELT.update_lead = writeTool({
         enum: ["new", "enriched", "sequenced", "replied", "signed_up", "nurture", "suppressed", "archived"],
       },
       score: { type: "number" },
+      contact_email: { type: "string", description: "a real public mailbox — validated" },
+      contact_name: { type: "string" },
+      contact_role: { type: "string" },
+      website: { type: "string" },
       suppressed_reason: { type: "string" },
     },
     required: ["lead_id", "status"],
     additionalProperties: false,
   },
-  note: (a) => `lead ${a.lead_id} → ${a.status}`,
+  note: (a) => `lead ${a.lead_id} → ${a.status}${a.contact_email ? ` (+email ${a.contact_email})` : ""}`,
   async live(args, ctx) {
     const { data: current } = await db().from("leads").select("status").eq("id", args.lead_id).maybeSingle();
     if (current?.status === "suppressed" && args.status !== "suppressed") {
@@ -537,6 +613,16 @@ TOOLBELT.update_lead = writeTool({
     const patch: Record<string, unknown> = { status: args.status, updated_at: new Date().toISOString() };
     if (args.score !== undefined) patch.score = args.score;
     if (args.suppressed_reason) patch.suppressed_reason = args.suppressed_reason;
+    if (args.contact_email !== undefined) {
+      const email = String(args.contact_email).trim().toLowerCase();
+      if (!EMAIL_RE.test(email) || JUNK_EMAIL_RE.test(email)) {
+        return { error: "contact_email is not a real mailbox — find one on the site/socials or archive the lead" };
+      }
+      patch.contact_email = email;
+    }
+    if (args.contact_name !== undefined) patch.contact_name = args.contact_name;
+    if (args.contact_role !== undefined) patch.contact_role = args.contact_role;
+    if (args.website !== undefined) patch.website = args.website;
     const { error } = await db().from("leads").update(patch).eq("id", args.lead_id);
     if (error) return { error: error.message };
     ctx.artifacts.push(`leads:${args.lead_id}`);

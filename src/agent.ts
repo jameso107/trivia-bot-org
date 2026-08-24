@@ -9,7 +9,7 @@ import { estimateUsd } from "./pricing.js";
 import { toolsFor, type OrgTool, type RunCtx } from "./tools.js";
 import { ROLES, type RoleKey } from "./roles.js";
 
-const MAX_TURNS = 20;
+const DEFAULT_MAX_TURNS = 20; // roles.ts maxTurns overrides (volume prospecting needs ~30)
 
 export interface RunResult {
   runId: string | null;
@@ -34,6 +34,7 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
   const role = ROLES[roleKey];
   const model = role.model ?? config.model;
   const maxRunUsd = role.maxRunUsd ?? config.maxRunUsd;
+  const maxTurns = role.maxTurns ?? DEFAULT_MAX_TURNS;
   const client = new OpenAI({ apiKey: config.openaiKey });
   const modeBanner = isDry()
     ? "MODE: DRY-RUN — reads are real; every write/email you attempt is RECORDED to the outbox instead of executed. Act exactly as you would live; the record IS the output."
@@ -81,7 +82,7 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
   const instructions = [
     `You are the **${roleKey}** agent of TRIVIUM (public brand; internal name trivia-bot) — a stateless worker in an agentic company. Today is ${new Date().toISOString().slice(0, 10)}. The owner is James — ALL owner-addressed mail goes to ${config.ownerEmail}, never a placeholder.`,
     modeBanner,
-    `TASK ADDRESSING: when a tool takes an \`agent\` value, it MUST be an exact registry key (ceo, auditor, chief-of-staff, analyst, trivia-ops-director, trivia-creation, trivia-qa, dev-features, dev-maintenance, qa-tester, ads-implementation, marketing-director, venue-search, venue-outreach, user-growth, ads-recruit, ads-outreach, social-media, website-content, cx-director, venue-success, user-support, ads-support, bizops-director, finance, ad-sales, contracts, data-steward) or omitted for director triage — never an invented name.`,
+    `TASK ADDRESSING: when a tool takes an \`agent\` value, it MUST be an exact registry key (ceo, auditor, chief-of-staff, analyst, trivia-ops-director, trivia-creation, trivia-qa, dev-features, dev-maintenance, qa-tester, ads-implementation, marketing-director, venue-search, lead-prospector, venue-outreach, user-growth, ads-recruit, ads-outreach, social-media, website-content, cx-director, venue-success, user-support, ads-support, bizops-director, finance, ad-sales, contracts, data-steward) or omitted for director triage — never an invented name.`,
     `ECONOMY: batch your reads — one well-filtered query beats five narrow ones; every tool round-trip costs budget. Act, then report.`,
     `WRITING FOR HUMANS: anything a person will read — send_email bodies above all — is written for a human, not an agent: short sentences, plain words, real names instead of ids, no markdown tables (email clients butcher them), no REPORT-contract formatting. Raw ids/UUIDs may appear only in a compact "refs:" line at the very end. Your run REPORT stays terse and machine-shaped; the email does not.`,
     `RUN CONTRACT: read the doctrine below, do today's work with your tools, and END with your run report in this exact shape:\n\nREPORT\ndone: <bullet lines, each with its artifact (row id / outbox file)>\nblocked: <or "nothing">\nlearned: <one or two lines>\nnext: <what tomorrow's run should pick up>\n\nEvery claimed completion MUST name an artifact — unverifiable claims are incidents (blueprint §11). Silence is the only forbidden outcome.`,
@@ -112,7 +113,7 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
   let status: RunResult["status"] = "ok";
 
   try {
-    for (let turn = 0; turn < MAX_TURNS; turn++) {
+    for (let turn = 0; turn < maxTurns; turn++) {
       const res = await client.responses.create({
         model,
         instructions,
@@ -156,7 +157,7 @@ export async function runAgent(roleKey: RoleKey, focus?: string): Promise<RunRes
         });
         status = "killed";
       }
-      if (turn === MAX_TURNS - 1) {
+      if (turn === maxTurns - 1) {
         status = "killed";
       }
     }
