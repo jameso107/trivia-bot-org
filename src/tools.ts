@@ -901,6 +901,27 @@ TOOLBELT.insert_pack = writeTool({
         violations.push(`R${q.round}P${q.position}: answer_note must start with 'source:'`);
       if (q.format === "multiple_choice" && (!Array.isArray(q.options) || (q.options as unknown[]).length !== 4))
         violations.push(`R${q.round}P${q.position}: multiple_choice needs exactly 4 options`);
+      // Answer shapes are the SCORING CONTRACT (app scoring.ts): a wrong shape
+      // makes a question silently unwinnable at the bar. Found 2026-08-26 —
+      // every agent-authored pack stored open_text answers as bare arrays.
+      if (q.format === "multiple_choice") {
+        if (typeof q.answer !== "number" || !Number.isInteger(q.answer) || (q.answer as number) < 0 || (q.answer as number) > 3)
+          violations.push(`R${q.round}P${q.position}: multiple_choice answer must be the option INDEX (0-3)`);
+      } else if (q.format === "true_false") {
+        if (typeof q.answer !== "boolean")
+          violations.push(`R${q.round}P${q.position}: true_false answer must be a boolean`);
+      } else if (q.format === "number_closest") {
+        if (typeof q.answer !== "number")
+          violations.push(`R${q.round}P${q.position}: number_closest answer must be a number`);
+      } else if (q.format === "open_text") {
+        if (Array.isArray(q.answer)) {
+          // Unambiguous intent — normalize into the contract instead of bouncing.
+          q.answer = { accept: (q.answer as unknown[]).map((s) => String(s).trim().toLowerCase()) };
+        }
+        const acc = (q.answer as { accept?: unknown[] } | null)?.accept;
+        if (!Array.isArray(acc) || acc.length === 0 || !acc.every((s) => typeof s === "string" && (s as string).trim().length > 0))
+          violations.push(`R${q.round}P${q.position}: open_text answer must be {accept: ["variant", ...]}`);
+      }
       const d = Number(q.difficulty);
       if (d < 1 || d > 5) violations.push(`R${q.round}P${q.position}: difficulty ${d} outside 1-5`);
     }
